@@ -332,6 +332,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/recursos": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recursos
+         * @description Recursos ligados neste ambiente (o front escolhe o fluxo de conferência de documentos).
+         */
+        get: operations["recursos_api_v1_recursos_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/health": {
         parameters: {
             query?: never;
@@ -561,9 +581,10 @@ export interface components {
             /** Enviadoem */
             enviadoEm?: string | null;
             /** Ocrveredito */
-            ocrVeredito?: ("ok" | "atencao" | "divergente" | "ilegivel" | "erro") | null;
+            ocrVeredito?: ("ok" | "atencao" | "divergente" | "tipo_errado" | "ilegivel" | "erro") | null;
             /** Observacao */
             observacao?: string | null;
+            analise?: components["schemas"]["OcrResultado"] | null;
         };
         /** Endereco */
         Endereco: {
@@ -678,6 +699,44 @@ export interface components {
             codigo: string;
             /** Nome */
             nome: string;
+        };
+        /** OcrCampo */
+        OcrCampo: {
+            /** K */
+            k: string;
+            /** V */
+            v: string;
+            /** Ok */
+            ok: boolean;
+        };
+        /**
+         * OcrResultado
+         * @description Resultado do OCR feito no navegador. Informativo: não substitui a conferência da secretaria.
+         */
+        OcrResultado: {
+            /**
+             * Veredito
+             * @enum {string}
+             */
+            veredito: "ok" | "atencao" | "divergente" | "tipo_errado" | "ilegivel" | "erro";
+            /** Confianca */
+            confianca?: number | null;
+            /**
+             * Campos
+             * @default []
+             */
+            campos: components["schemas"]["OcrCampo"][];
+            /**
+             * Alertas
+             * @default []
+             */
+            alertas: string[];
+            /**
+             * Fonte
+             * @default navegador
+             * @enum {string}
+             */
+            fonte: "ia" | "navegador";
         };
         /** OpcoesPagamento */
         OpcoesPagamento: {
@@ -1417,6 +1476,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Questionario"][];
+                };
+            };
+        };
+    };
+    recursos_api_v1_recursos_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

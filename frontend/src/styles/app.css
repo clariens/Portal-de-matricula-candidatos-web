@@ -237,3 +237,21 @@ a{color:var(--brand)}
 .cep-group{display:flex;gap:8px;align-items:stretch}
 .btn-icon{padding:0;width:44px;min-width:44px;border-radius:10px}
 .field .hint[aria-live]{min-height:18px}
+/* conferência de documentos: selos ✓ ⚠ ✗ e resultado na linha */
+.chip-icone::before{display:none}
+.chip-icone b{font-size:13px;line-height:1}
+.doc.doc-bad{border-color:var(--bad);box-shadow:0 0 0 1px var(--bad-soft)}
+.doc.doc-warn{border-color:var(--warn)}
+.doc.doc-ok{border-color:var(--ok)}
+.resultado{font-size:14px;font-weight:600;display:flex;gap:8px;align-items:baseline}
+.resultado b{font-size:16px}
+.resultado.ok{color:var(--ok)}.resultado.warn{color:var(--warn)}.resultado.bad{color:var(--bad)}
+.resultado-detalhe{font-size:13px;color:var(--ink);margin-left:24px}
+.ok-txt{color:var(--ok);font-weight:700}.warn-txt{color:var(--warn);font-weight:700}.bad-txt{color:var(--bad);font-weight:700}
+/* análise com IA: sutil — palavra pulsando + barrinha deslizando */
+.pulsando{animation:pulsar 1.6s ease-in-out infinite}
+@keyframes pulsar{0%,100%{opacity:.45}50%{opacity:1}}
+.ocr.analisando{gap:6px;font-size:13px;color:var(--muted)}
+.bar.indeterminada{height:3px;position:relative}
+.bar.indeterminada i{position:absolute;inset:0 auto 0 0;width:30%;animation:deslizar 1.3s ease-in-out infinite}
+@keyframes deslizar{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}

@@ -151,3 +151,13 @@ def test_logout(logged):
     r = logged.post("/api/v1/auth/logout", headers=H)
     assert r.status_code == 204
     assert logged.get("/api/v1/me").status_code == 401
+
+
+def test_documento_de_tipo_errado_nao_anexa(logged):
+    r = _upload(logged, "05", veredito="tipo_errado")
+    assert r.status_code == 422 and r.json()["erro"]["campos"] == {"arquivo": "Envie outro arquivo."}
+    docs = {d["codigo"]: d["status"] for d in logged.get(f"/api/v1/inscricoes/{INSC}/documentos").json()}
+    assert docs["05"] == "pendente"
+    # divergente, ilegível e leitura fraca ("erro") podem ir para conferência manual
+    for v in ("divergente", "ilegivel", "erro"):
+        assert _upload(logged, "05", veredito=v).json()["status"] == "anexado"

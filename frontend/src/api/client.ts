@@ -90,6 +90,8 @@ export const api = {
   login: (login: string, senha: string) => request<Pessoa>("POST", "/auth/login", { login, senha }),
   logout: () => request<null>("POST", "/auth/logout"),
   me: () => request<Pessoa>("GET", "/me"),
+  /** Recursos ligados no ambiente: conferência de documentos pela IA (servidor) ou pelo navegador. */
+  recursos: () => request<{ conferenciaDocumentos: "ia" | "navegador" }>("GET", "/recursos"),
 
   inscricoes: () => request<Inscricao[]>("GET", "/inscricoes"),
   inscricao: (id: string) => request<Inscricao>("GET", ins(id)),

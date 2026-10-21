@@ -14,6 +14,7 @@ from app.config import get_settings
 from app.core.errors import PortalError, portal_error_handler, validation_error_handler
 from app.core.http import TLS_CONTEXT
 from app.core.session import require_csrf
+from app.services.ia_documentos import LeitorDocumentos
 from app.services.lyceum import build_gateway
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -29,7 +30,13 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("Defina PORTAL_SESSION_SECRET antes de usar LYCEUM_MODE=techne")
     async with httpx.AsyncClient(verify=TLS_CONTEXT) as client:
         app.state.gateway = build_gateway(s, client)
-        logging.getLogger("portal").info("Portal iniciado em modo %s", s.lyceum_mode)
+        # conferência de documentos com IA (Claude) só com chave configurada e ativada
+        app.state.leitor = LeitorDocumentos(s) if s.ia_documentos_ativa and s.anthropic_api_key else None
+        app.state.tentativas_ia = {}
+        logging.getLogger("portal").info(
+            "Portal iniciado em modo %s | conferência de documentos: %s", s.lyceum_mode,
+            f"IA ({s.ia_documentos_modelo}, teto US${s.ia_documentos_limite_diario_usd:.2f}/dia)" if app.state.leitor
+            else "navegador (OCR local)")
         yield
 
 
@@ -53,6 +60,13 @@ app.add_middleware(
 api_deps = [Depends(require_csrf)]
 for r in (auth.router, enderecos.router, inscricoes.router):
     app.include_router(r, prefix="/api/v1", dependencies=api_deps)
+
+
+@app.get("/api/v1/recursos", tags=["infra"])
+async def recursos(request: Request):
+    """Recursos ligados neste ambiente (o front escolhe o fluxo de conferência de documentos)."""
+    leitor = getattr(request.app.state, "leitor", None)
+    return {"conferenciaDocumentos": "ia" if leitor else "navegador"}
 
 
 @app.get("/api/v1/health", tags=["infra"])

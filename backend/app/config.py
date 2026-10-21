@@ -27,6 +27,17 @@ class Settings(BaseSettings):
     #  "enviar":  envia de verdade
     lyceum_documentos_modo: Literal["simular", "enviar"] = "simular"
 
+    # Conferência de documentos com IA (Claude). Sem chave ou desativada: conferência no navegador (OCR local).
+    anthropic_api_key: str = ""
+    ia_documentos_ativa: bool = False
+    ia_documentos_modelo: str = "claude-opus-5-5"
+    ia_documentos_esforco: Literal["low", "medium", "high"] = "low"
+    ia_documentos_max_px: int = 2000  # maior lado da imagem enviada (custo cresce com a área)
+    ia_documentos_timeout: float = 60.0
+    ia_documentos_concorrencia: int = 4  # chamadas simultâneas por processo (protege a cota da conta)
+    ia_documentos_limite_diario_usd: float = 20.0  # acima disso, pausa a IA e manda para conferência manual
+    ia_documentos_tentativas_por_documento: int = 8  # por inscrição e tipo, na sessão
+
     portal_session_secret: str = "dev-inseguro"
     portal_session_horas: int = 12
     portal_cookie_secure: bool = False

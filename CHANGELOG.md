@@ -33,6 +33,21 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
   - **`LYCEUM_DOCUMENTOS_MODO=simular` (padrão)**: esse POST finaliza a inscrição no Lyceum, então em DEV ele só
     valida, registra no log o que seria enviado e avança o wizard. Envio real só com `enviar`. Em DEV, nenhum
     upload real foi feito.
+- **Conferência de documentos com identificação do tipo**: além dos dados, o OCR verifica se o arquivo é o documento
+  pedido (marcas por código, ex.: "CADASTRO DE PESSOAS FÍSICAS", "REGISTRO GERAL"). Sequência: legível → tipo → dados.
+  Selos ✓ conferido / ⚠ ressalva / ✗ com a mensagem na linha. Documento ilegível ou não reconhecido só aceita outro
+  arquivo (o backend também recusa); dados divergentes permitem outro arquivo ou conferência manual.
+- **Conferência de documentos com IA (Claude, visão) no servidor**: o Claude lê e classifica (tipo, frente/verso,
+  legibilidade, nome, CPF, RG, nascimento, ano, CEP) em JSON validado por schema; as regras do backend decidem.
+  Testado com fotos reais de RG em DEV: frente e verso identificados, verso girado lido corretamente, RG no lugar do
+  comprovante recusado; US$ 0,018–0,023 e 4–6 s por análise. Teto diário de gasto, concorrência limitada, limite de
+  tentativas e queda para conferência manual em qualquer falha. Tela: "Analisando" pulsando + barra fina, análises
+  em paralelo. Sem chave, segue o OCR no navegador.
+- **OCR nunca trava documento verdadeiro por leitura fraca**: teste com fotos reais de RG deu 25–47% de confiança.
+  Abaixo de 60% o resultado é "Não conferido" (outra foto ou conferência manual), nunca "não reconhecido";
+  ilegível também deixou de bloquear. Datas com dia/mês de 1 dígito ("26/9/2004") passam a ser lidas.
+- **WEBP aceito nos documentos**: convertido para JPG no navegador antes de anexar (o Lyceum só aceita JPEG, JPG,
+  PDF e PNG); a linha indica "(convertido de WEBP)".
 - Gravação real da Etapa 1 validada em DEV (`atualizar.json`), incluindo os campos montados por JavaScript no legado
   (`enderecoUf`, `paisSelect`), sem os quais o legado recusa o envio.
 - Contexto TLS único no processo (`app/core/http.py`): cada cliente HTTP novo recarregava os certificados (~0,5 s).

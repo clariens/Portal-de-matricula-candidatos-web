@@ -3,6 +3,9 @@
 import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.js?url";
 import { createWorker, type Worker } from "tesseract.js";
+import { ehPdf } from "../imagem";
+
+export { canvasParaJpeg, ehWebp } from "../imagem";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -30,8 +33,6 @@ function getWorker() {
   }
   return worker;
 }
-
-export const ehPdf = (f: File) => f.type === "application/pdf" || /\.pdf$/i.test(f.name);
 
 /** Converte imagem ou 1ª página de PDF em canvas (limitado a 2400 px no maior lado). */
 export async function fileToCanvas(file: File): Promise<HTMLCanvasElement> {

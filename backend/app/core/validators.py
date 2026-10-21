@@ -48,7 +48,7 @@ def normalizar_data_br(v: str | None) -> str:
     """Converte as variações vistas no Lyceum para dd/mm/aaaa.
 
     - "14032004" (form do legado: ddmmaaaa; a máscara 99/99/9999 só é aplicada no navegador)
-    - "14/03/2004", "14/03/2004 00:00:00"
+    - "14/03/2004", "14/3/2004" (RG antigo), "14/03/2004 00:00:00"
     - "2004-03-14", "2004-03-14T00:00:00"
     Valor irreconhecível volta como veio (a validação do formulário aponta o erro).
     """
@@ -58,8 +58,9 @@ def normalizar_data_br(v: str | None) -> str:
     d = digits(s)
     if re.fullmatch(r"\d{4}-\d{2}-\d{2}.*", s):
         return f"{s[8:10]}/{s[5:7]}/{s[0:4]}"
-    if len(d) >= 8 and re.fullmatch(r"\d{2}/\d{2}/\d{4}.*", s):
-        return s[:10]
+    m = re.match(r"^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", s)  # 14/03/2004, 14/3/2004, 14.03.2004 (+ hora)
+    if m:
+        return f"{int(m[1]):02d}/{int(m[2]):02d}/{m[3]}"
     if len(d) == 8 and s.isdigit():
         return f"{d[0:2]}/{d[2:4]}/{d[4:8]}"
     return s

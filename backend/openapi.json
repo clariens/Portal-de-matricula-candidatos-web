@@ -846,6 +846,26 @@
         }
       }
     },
+    "/api/v1/recursos": {
+      "get": {
+        "tags": [
+          "infra"
+        ],
+        "summary": "Recursos",
+        "description": "Recursos ligados neste ambiente (o front escolhe o fluxo de conferência de documentos).",
+        "operationId": "recursos_api_v1_recursos_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/health": {
       "get": {
         "tags": [
@@ -1491,6 +1511,7 @@
                   "ok",
                   "atencao",
                   "divergente",
+                  "tipo_errado",
                   "ilegivel",
                   "erro"
                 ]
@@ -1511,6 +1532,16 @@
               }
             ],
             "title": "Observacao"
+          },
+          "analise": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OcrResultado"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -1911,6 +1942,89 @@
           "nome"
         ],
         "title": "Municipio"
+      },
+      "OcrCampo": {
+        "properties": {
+          "k": {
+            "type": "string",
+            "title": "K"
+          },
+          "v": {
+            "type": "string",
+            "title": "V"
+          },
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          }
+        },
+        "type": "object",
+        "required": [
+          "k",
+          "v",
+          "ok"
+        ],
+        "title": "OcrCampo"
+      },
+      "OcrResultado": {
+        "properties": {
+          "veredito": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "atencao",
+              "divergente",
+              "tipo_errado",
+              "ilegivel",
+              "erro"
+            ],
+            "title": "Veredito"
+          },
+          "confianca": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confianca"
+          },
+          "campos": {
+            "items": {
+              "$ref": "#/components/schemas/OcrCampo"
+            },
+            "type": "array",
+            "title": "Campos",
+            "default": []
+          },
+          "alertas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Alertas",
+            "default": []
+          },
+          "fonte": {
+            "type": "string",
+            "enum": [
+              "ia",
+              "navegador"
+            ],
+            "title": "Fonte",
+            "default": "navegador"
+          }
+        },
+        "type": "object",
+        "required": [
+          "veredito"
+        ],
+        "title": "OcrResultado",
+        "description": "Resultado do OCR feito no navegador. Informativo: não substitui a conferência da secretaria."
       },
       "OpcoesPagamento": {
         "properties": {
