@@ -1,0 +1,2314 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Portal de Matrícula do Candidato — BFF",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Login",
+        "operationId": "login_api_v1_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pessoa"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Logout",
+        "operationId": "logout_api_v1_auth_logout_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Me",
+        "operationId": "me_api_v1_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pessoa"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enderecos/ufs": {
+      "get": {
+        "tags": [
+          "enderecos"
+        ],
+        "summary": "Ufs",
+        "operationId": "ufs_api_v1_enderecos_ufs_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Uf"
+                  },
+                  "type": "array",
+                  "title": "Response Ufs Api V1 Enderecos Ufs Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enderecos/paises": {
+      "get": {
+        "tags": [
+          "enderecos"
+        ],
+        "summary": "Paises",
+        "operationId": "paises_api_v1_enderecos_paises_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array",
+                  "title": "Response Paises Api V1 Enderecos Paises Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enderecos/ufs/{uf}/municipios": {
+      "get": {
+        "tags": [
+          "enderecos"
+        ],
+        "summary": "Municipios",
+        "operationId": "municipios_api_v1_enderecos_ufs__uf__municipios_get",
+        "parameters": [
+          {
+            "name": "uf",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z]{2}$",
+              "title": "Uf"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Municipio"
+                  },
+                  "title": "Response Municipios Api V1 Enderecos Ufs  Uf  Municipios Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enderecos/cep/{cep}": {
+      "get": {
+        "tags": [
+          "enderecos"
+        ],
+        "summary": "Cep",
+        "operationId": "cep_api_v1_enderecos_cep__cep__get",
+        "parameters": [
+          {
+            "name": "cep",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{5}-?\\d{3}$",
+              "title": "Cep"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CepResultado"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inscricoes": {
+      "get": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Listar",
+        "operationId": "listar_api_v1_inscricoes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Inscricao"
+                  },
+                  "type": "array",
+                  "title": "Response Listar Api V1 Inscricoes Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inscricoes/{cod_candidato}": {
+      "get": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Obter",
+        "operationId": "obter_api_v1_inscricoes__cod_candidato__get",
+        "parameters": [
+          {
+            "name": "cod_candidato",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6,20}$",
+              "title": "Cod Candidato"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Inscricao"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inscricoes/{cod_candidato}/candidato": {
+      "get": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Obter Candidato",
+        "operationId": "obter_candidato_api_v1_inscricoes__cod_candidato__candidato_get",
+        "parameters": [
+          {
+            "name": "cod_candidato",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6,20}$",
+              "title": "Cod Candidato"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Candidato"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Atualizar Candidato",
+        "operationId": "atualizar_candidato_api_v1_inscricoes__cod_candidato__candidato_put",
+        "parameters": [
+          {
+            "name": "cod_candidato",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6,20}$",
+              "title": "Cod Candidato"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CandidatoUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Candidato"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inscricoes/{cod_candidato}/documentos": {
+      "get": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Listar Documentos",
+        "operationId": "listar_documentos_api_v1_inscricoes__cod_candidato__documentos_get",
+        "parameters": [
+          {
+            "name": "cod_candidato",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6,20}$",
+              "title": "Cod Candidato"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DocumentoStatus"
+                  },
+                  "title": "Response Listar Documentos Api V1 Inscricoes  Cod Candidato  Documentos Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inscricoes/{cod_candidato}/documentos/{tipo}": {
+      "post": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Enviar Documento",
+        "operationId": "enviar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post",
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tipo"
+            }
+          },
+          {
+            "name": "cod_candidato",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6,20}$",
+              "title": "Cod Candidato"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_enviar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentoStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Remover Documento",
+        "operationId": "remover_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__delete",
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tipo"
+            }
+          },
+          {
+            "name": "cod_candidato",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6,20}$",
+              "title": "Cod Candidato"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DocumentoStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inscricoes/{cod_candidato}/envio-documentos": {
+      "post": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Enviar Documentos",
+        "description": "Envia ao Lyceum, de uma vez, os documentos anexados. No legado isso FINALIZA a inscrição.",
+        "operationId": "enviar_documentos_api_v1_inscricoes__cod_candidato__envio_documentos_post",
+        "parameters": [
+          {
+            "name": "cod_candidato",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6,20}$",
+              "title": "Cod Candidato"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnvioDocumentosResultado"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inscricoes/{cod_candidato}/pagamento/opcoes": {
+      "get": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Opcoes Pagamento",
+        "operationId": "opcoes_pagamento_api_v1_inscricoes__cod_candidato__pagamento_opcoes_get",
+        "parameters": [
+          {
+            "name": "cod_candidato",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6,20}$",
+              "title": "Cod Candidato"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpcoesPagamento"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inscricoes/{cod_candidato}/cupons/validar": {
+      "post": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Validar Cupom",
+        "operationId": "validar_cupom_api_v1_inscricoes__cod_candidato__cupons_validar_post",
+        "parameters": [
+          {
+            "name": "cod_candidato",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6,20}$",
+              "title": "Cod Candidato"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CupomIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CupomResultado"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inscricoes/{cod_candidato}/pagamento": {
+      "post": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Efetivar Pagamento",
+        "operationId": "efetivar_pagamento_api_v1_inscricoes__cod_candidato__pagamento_post",
+        "parameters": [
+          {
+            "name": "cod_candidato",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6,20}$",
+              "title": "Cod Candidato"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PagamentoIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PagamentoResultado"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inscricoes/{cod_candidato}/matricula": {
+      "get": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Obter Matricula",
+        "operationId": "obter_matricula_api_v1_inscricoes__cod_candidato__matricula_get",
+        "parameters": [
+          {
+            "name": "cod_candidato",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6,20}$",
+              "title": "Cod Candidato"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Matricula"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inscricoes/{cod_candidato}/matricula/confirmar": {
+      "post": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Confirmar Matricula",
+        "operationId": "confirmar_matricula_api_v1_inscricoes__cod_candidato__matricula_confirmar_post",
+        "parameters": [
+          {
+            "name": "cod_candidato",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6,20}$",
+              "title": "Cod Candidato"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConfirmacaoResultado"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/questionarios/pendentes": {
+      "get": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Questionarios",
+        "operationId": "questionarios_api_v1_questionarios_pendentes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Questionario"
+                  },
+                  "type": "array",
+                  "title": "Response Questionarios Api V1 Questionarios Pendentes Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/health": {
+      "get": {
+        "tags": [
+          "infra"
+        ],
+        "summary": "Health",
+        "operationId": "health_api_v1_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Body_enviar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post": {
+        "properties": {
+          "arquivo": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "Arquivo"
+          },
+          "ocr": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ocr",
+            "description": "JSON de OcrResultado produzido no navegador"
+          }
+        },
+        "type": "object",
+        "required": [
+          "arquivo"
+        ],
+        "title": "Body_enviar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"
+      },
+      "Candidato": {
+        "properties": {
+          "nomeCompleto": {
+            "type": "string",
+            "title": "Nomecompleto"
+          },
+          "dataNascimento": {
+            "type": "string",
+            "title": "Datanascimento",
+            "description": "dd/mm/aaaa"
+          },
+          "sexo": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "M",
+                  "F",
+                  "O"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sexo"
+          },
+          "tipoDoc": {
+            "type": "string",
+            "enum": [
+              "cpf",
+              "passaporte"
+            ],
+            "title": "Tipodoc",
+            "default": "cpf"
+          },
+          "cpf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpf"
+          },
+          "identidade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identidade"
+          },
+          "passaporte": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passaporte"
+          },
+          "estadoCivil": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estadocivil"
+          },
+          "emailPessoal": {
+            "type": "string",
+            "title": "Emailpessoal"
+          },
+          "celular": {
+            "type": "string",
+            "title": "Celular"
+          },
+          "telefone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefone"
+          },
+          "paisNascimento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paisnascimento",
+            "default": "Brasil"
+          },
+          "municipioNascimento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Municipionascimento"
+          },
+          "endereco": {
+            "$ref": "#/components/schemas/Endereco"
+          },
+          "codCandidato": {
+            "type": "string",
+            "title": "Codcandidato"
+          },
+          "codConcurso": {
+            "type": "string",
+            "title": "Codconcurso"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nomeCompleto",
+          "dataNascimento",
+          "emailPessoal",
+          "celular",
+          "endereco",
+          "codCandidato",
+          "codConcurso"
+        ],
+        "title": "Candidato"
+      },
+      "CandidatoUpdate": {
+        "properties": {
+          "nomeCompleto": {
+            "type": "string",
+            "title": "Nomecompleto"
+          },
+          "dataNascimento": {
+            "type": "string",
+            "title": "Datanascimento",
+            "description": "dd/mm/aaaa"
+          },
+          "sexo": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "M",
+                  "F",
+                  "O"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sexo"
+          },
+          "tipoDoc": {
+            "type": "string",
+            "enum": [
+              "cpf",
+              "passaporte"
+            ],
+            "title": "Tipodoc",
+            "default": "cpf"
+          },
+          "cpf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpf"
+          },
+          "identidade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identidade"
+          },
+          "passaporte": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passaporte"
+          },
+          "estadoCivil": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estadocivil"
+          },
+          "emailPessoal": {
+            "type": "string",
+            "title": "Emailpessoal"
+          },
+          "celular": {
+            "type": "string",
+            "title": "Celular"
+          },
+          "telefone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefone"
+          },
+          "paisNascimento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Paisnascimento",
+            "default": "Brasil"
+          },
+          "municipioNascimento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Municipionascimento"
+          },
+          "endereco": {
+            "$ref": "#/components/schemas/Endereco"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nomeCompleto",
+          "dataNascimento",
+          "emailPessoal",
+          "celular",
+          "endereco"
+        ],
+        "title": "CandidatoUpdate"
+      },
+      "CepResultado": {
+        "properties": {
+          "cep": {
+            "type": "string",
+            "title": "Cep"
+          },
+          "uf": {
+            "type": "string",
+            "title": "Uf"
+          },
+          "municipio": {
+            "type": "string",
+            "title": "Municipio"
+          },
+          "municipioCodigo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Municipiocodigo"
+          },
+          "bairro": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bairro"
+          },
+          "endereco": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Endereco"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cep",
+          "uf",
+          "municipio"
+        ],
+        "title": "CepResultado"
+      },
+      "Cobranca": {
+        "properties": {
+          "formaPagamento": {
+            "type": "string",
+            "enum": [
+              "Boleto",
+              "PIX",
+              "Cartao"
+            ],
+            "title": "Formapagamento"
+          },
+          "numParcelas": {
+            "type": "integer",
+            "title": "Numparcelas"
+          },
+          "valorParcela": {
+            "type": "number",
+            "title": "Valorparcela"
+          },
+          "vencimento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vencimento"
+          },
+          "instrucoes": {
+            "type": "string",
+            "title": "Instrucoes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "formaPagamento",
+          "numParcelas",
+          "valorParcela",
+          "instrucoes"
+        ],
+        "title": "Cobranca"
+      },
+      "ConfirmacaoResultado": {
+        "properties": {
+          "situacao": {
+            "type": "string",
+            "title": "Situacao"
+          },
+          "questionariosPendentes": {
+            "items": {
+              "$ref": "#/components/schemas/Questionario"
+            },
+            "type": "array",
+            "title": "Questionariospendentes",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "situacao"
+        ],
+        "title": "ConfirmacaoResultado"
+      },
+      "Contrato": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "nao_enviado",
+              "aguardando_assinatura",
+              "assinado"
+            ],
+            "title": "Status"
+          },
+          "canal": {
+            "type": "string",
+            "title": "Canal",
+            "default": "Clicksign · WhatsApp"
+          },
+          "destinatario": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destinatario"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "Contrato"
+      },
+      "CupomIn": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 2,
+            "title": "Codigo"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo"
+        ],
+        "title": "CupomIn"
+      },
+      "CupomResultado": {
+        "properties": {
+          "valido": {
+            "type": "boolean",
+            "title": "Valido"
+          },
+          "mensagem": {
+            "type": "string",
+            "title": "Mensagem"
+          },
+          "descontoPercentual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descontopercentual"
+          },
+          "planos": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Plano"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Planos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "valido",
+          "mensagem"
+        ],
+        "title": "CupomResultado"
+      },
+      "Disciplina": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "nome": {
+            "type": "string",
+            "title": "Nome"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "nome"
+        ],
+        "title": "Disciplina"
+      },
+      "DocumentoStatus": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "nome": {
+            "type": "string",
+            "title": "Nome"
+          },
+          "obrigatorio": {
+            "type": "boolean",
+            "title": "Obrigatorio"
+          },
+          "regra": {
+            "type": "string",
+            "enum": [
+              "cpf",
+              "id",
+              "escolar",
+              "declaracao",
+              "residencia",
+              "foto",
+              "nome"
+            ],
+            "title": "Regra",
+            "default": "nome"
+          },
+          "extensoes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Extensoes",
+            "default": [
+              "pdf",
+              "jpg",
+              "jpeg",
+              "png"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pendente",
+              "anexado",
+              "enviado",
+              "em_conferencia",
+              "aprovado",
+              "recusado"
+            ],
+            "title": "Status",
+            "default": "pendente"
+          },
+          "arquivo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Arquivo"
+          },
+          "enviadoEm": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enviadoem"
+          },
+          "ocrVeredito": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "atencao",
+                  "divergente",
+                  "ilegivel",
+                  "erro"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ocrveredito"
+          },
+          "observacao": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observacao"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "nome",
+          "obrigatorio"
+        ],
+        "title": "DocumentoStatus"
+      },
+      "Endereco": {
+        "properties": {
+          "pais": {
+            "type": "string",
+            "title": "Pais",
+            "default": "BRASIL"
+          },
+          "cep": {
+            "type": "string",
+            "title": "Cep"
+          },
+          "uf": {
+            "type": "string",
+            "maxLength": 2,
+            "minLength": 2,
+            "title": "Uf"
+          },
+          "municipio": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Municipio"
+          },
+          "municipioCodigo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Municipiocodigo"
+          },
+          "endereco": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Endereco"
+          },
+          "numero": {
+            "type": "string",
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Numero"
+          },
+          "complemento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Complemento"
+          },
+          "bairro": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Bairro"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cep",
+          "uf",
+          "municipio",
+          "endereco",
+          "numero",
+          "bairro"
+        ],
+        "title": "Endereco"
+      },
+      "EnvioDocumentosResultado": {
+        "properties": {
+          "simulado": {
+            "type": "boolean",
+            "title": "Simulado"
+          },
+          "mensagem": {
+            "type": "string",
+            "title": "Mensagem"
+          },
+          "documentos": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentoStatus"
+            },
+            "type": "array",
+            "title": "Documentos"
+          }
+        },
+        "type": "object",
+        "required": [
+          "simulado",
+          "mensagem",
+          "documentos"
+        ],
+        "title": "EnvioDocumentosResultado"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Inscricao": {
+        "properties": {
+          "codCandidato": {
+            "type": "string",
+            "title": "Codcandidato"
+          },
+          "codConcurso": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Codconcurso"
+          },
+          "dataInscricao": {
+            "type": "string",
+            "title": "Datainscricao"
+          },
+          "processo": {
+            "type": "string",
+            "title": "Processo"
+          },
+          "curso": {
+            "type": "string",
+            "title": "Curso"
+          },
+          "unidade": {
+            "type": "string",
+            "title": "Unidade"
+          },
+          "situacao": {
+            "type": "string",
+            "enum": [
+              "Convocado",
+              "Confirmado",
+              "Pré-Matriculado",
+              "Matriculado",
+              "Cancelado",
+              "Inscrito"
+            ],
+            "title": "Situacao"
+          },
+          "formaPagamento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formapagamento"
+          },
+          "vencimento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vencimento"
+          },
+          "statusPagamento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statuspagamento"
+          },
+          "contratoAceito": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contratoaceito"
+          },
+          "agendamento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agendamento"
+          },
+          "sala": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sala"
+          },
+          "etapaAtual": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "dados",
+                  "documentos",
+                  "pagamento",
+                  "conclusao"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etapaatual"
+          },
+          "acoes": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "matricular",
+                "continuar_matricula",
+                "contrato",
+                "documentos"
+              ]
+            },
+            "type": "array",
+            "title": "Acoes",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "codCandidato",
+          "dataInscricao",
+          "processo",
+          "curso",
+          "unidade",
+          "situacao"
+        ],
+        "title": "Inscricao"
+      },
+      "LoginIn": {
+        "properties": {
+          "login": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 3,
+            "title": "Login",
+            "description": "E-mail ou CPF"
+          },
+          "senha": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Senha"
+          }
+        },
+        "type": "object",
+        "required": [
+          "login",
+          "senha"
+        ],
+        "title": "LoginIn"
+      },
+      "Matricula": {
+        "properties": {
+          "matricula": {
+            "type": "string",
+            "title": "Matricula"
+          },
+          "curso": {
+            "type": "string",
+            "title": "Curso"
+          },
+          "turma": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Turma"
+          },
+          "periodo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Periodo"
+          },
+          "unidade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unidade"
+          },
+          "disciplinas": {
+            "items": {
+              "$ref": "#/components/schemas/Disciplina"
+            },
+            "type": "array",
+            "title": "Disciplinas"
+          },
+          "contrato": {
+            "$ref": "#/components/schemas/Contrato"
+          },
+          "formaPagamento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Formapagamento"
+          },
+          "numParcelas": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numparcelas"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matricula",
+          "curso",
+          "disciplinas",
+          "contrato"
+        ],
+        "title": "Matricula"
+      },
+      "Municipio": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "nome": {
+            "type": "string",
+            "title": "Nome"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "nome"
+        ],
+        "title": "Municipio"
+      },
+      "OpcoesPagamento": {
+        "properties": {
+          "tiposResponsavel": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "Pessoa",
+                "OutraPessoa",
+                "Empresa"
+              ]
+            },
+            "type": "array",
+            "title": "Tiposresponsavel"
+          },
+          "planos": {
+            "items": {
+              "$ref": "#/components/schemas/Plano"
+            },
+            "type": "array",
+            "title": "Planos"
+          },
+          "cupomAplicado": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cupomaplicado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tiposResponsavel",
+          "planos"
+        ],
+        "title": "OpcoesPagamento"
+      },
+      "PagamentoIn": {
+        "properties": {
+          "tipoResp": {
+            "type": "string",
+            "enum": [
+              "Pessoa",
+              "OutraPessoa",
+              "Empresa"
+            ],
+            "title": "Tiporesp"
+          },
+          "responsavel": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Responsavel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "codigoPlano": {
+            "type": "string",
+            "title": "Codigoplano"
+          },
+          "voucher": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Voucher"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tipoResp",
+          "codigoPlano"
+        ],
+        "title": "PagamentoIn"
+      },
+      "PagamentoResultado": {
+        "properties": {
+          "situacao": {
+            "type": "string",
+            "title": "Situacao"
+          },
+          "cobranca": {
+            "$ref": "#/components/schemas/Cobranca"
+          }
+        },
+        "type": "object",
+        "required": [
+          "situacao",
+          "cobranca"
+        ],
+        "title": "PagamentoResultado"
+      },
+      "Pessoa": {
+        "properties": {
+          "codPessoa": {
+            "type": "string",
+            "title": "Codpessoa"
+          },
+          "login": {
+            "type": "string",
+            "title": "Login"
+          },
+          "nome": {
+            "type": "string",
+            "title": "Nome"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "cpf": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpf"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codPessoa",
+          "login",
+          "nome"
+        ],
+        "title": "Pessoa"
+      },
+      "Plano": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "formaPagamento": {
+            "type": "string",
+            "enum": [
+              "Boleto",
+              "PIX",
+              "Cartao"
+            ],
+            "title": "Formapagamento"
+          },
+          "nome": {
+            "type": "string",
+            "title": "Nome"
+          },
+          "descricao": {
+            "type": "string",
+            "title": "Descricao"
+          },
+          "planoPadrao": {
+            "type": "string",
+            "title": "Planopadrao",
+            "default": "N"
+          },
+          "numParcelas": {
+            "type": "integer",
+            "title": "Numparcelas"
+          },
+          "valorParcela": {
+            "type": "number",
+            "title": "Valorparcela"
+          },
+          "valorTotal": {
+            "type": "number",
+            "title": "Valortotal"
+          },
+          "disponivel": {
+            "type": "boolean",
+            "title": "Disponivel",
+            "default": true
+          },
+          "motivoIndisponivel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivoindisponivel"
+          },
+          "tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "formaPagamento",
+          "nome",
+          "descricao",
+          "numParcelas",
+          "valorParcela",
+          "valorTotal"
+        ],
+        "title": "Plano"
+      },
+      "Questionario": {
+        "properties": {
+          "codigo": {
+            "type": "string",
+            "title": "Codigo"
+          },
+          "titulo": {
+            "type": "string",
+            "title": "Titulo"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "codigo",
+          "titulo"
+        ],
+        "title": "Questionario"
+      },
+      "Responsavel": {
+        "properties": {
+          "nome": {
+            "type": "string",
+            "minLength": 3,
+            "title": "Nome",
+            "description": "Nome completo ou razão social"
+          },
+          "documento": {
+            "type": "string",
+            "title": "Documento",
+            "description": "CPF (OutraPessoa) ou CNPJ (Empresa)"
+          },
+          "dataNascimento": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Datanascimento"
+          },
+          "sexo": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "M",
+                  "F",
+                  "O"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sexo"
+          },
+          "estadoCivil": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estadocivil"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "celular": {
+            "type": "string",
+            "title": "Celular"
+          },
+          "telefone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefone"
+          },
+          "endereco": {
+            "$ref": "#/components/schemas/Endereco"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nome",
+          "documento",
+          "email",
+          "celular",
+          "endereco"
+        ],
+        "title": "Responsavel"
+      },
+      "Uf": {
+        "properties": {
+          "sigla": {
+            "type": "string",
+            "title": "Sigla"
+          },
+          "nome": {
+            "type": "string",
+            "title": "Nome"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sigla",
+          "nome"
+        ],
+        "title": "Uf"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
