@@ -231,8 +231,12 @@ export function EtapaDocumentos() {
       await recarregar();
       ir("pagamento");
     } catch (e) {
-      setErroEnvio(e instanceof ApiError ? e.message : "Não foi possível enviar os documentos.");
+      const msg = e instanceof ApiError ? e.message : "Não foi possível enviar os documentos.";
+      setErroEnvio(msg);
+      toast(msg);
       setAvancando(false);
+      // o alerta fica logo acima do botão: rola até ele para não passar despercebido
+      requestAnimationFrame(() => document.getElementById("erro-envio")?.scrollIntoView({ behavior: "smooth", block: "center" }));
     }
   }
 
@@ -457,7 +461,11 @@ export function EtapaDocumentos() {
           Formatos: JPG, PNG, WEBP (enviado como JPG) ou PDF (a primeira página é lida) · até {MAX_MB} MB por arquivo.
         </p>
       </section>
-      {erroEnvio && <Alert>{erroEnvio}</Alert>}
+      {erroEnvio && (
+        <div id="erro-envio" style={{ marginTop: 16 }}>
+          <Alert>{erroEnvio}</Alert>
+        </div>
+      )}
       <div className="foot">
         <button className="btn btn-ghost" type="button" onClick={() => ir(somenteLeitura ? "conclusao" : "dados")}>
           Voltar

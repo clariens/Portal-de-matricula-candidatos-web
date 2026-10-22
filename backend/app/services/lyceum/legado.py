@@ -22,7 +22,12 @@ Contrato observado em DEV (20/10/2026):
   GET  /r/documentosPorProcesso → <form id="frm-documentos"> com um <input type=file name="{código}"> por
                            documento; obrigatórios têm `required` e "- Obrigatório" no título. Só abre DEPOIS
                            de um atualizar.json bem-sucedido na mesma sessão (antes: página "Ocorreu um erro").
-  POST /r/uploadDocumentosPorProcesso (multipart, todos os campos) → FINALIZA a inscrição. Não executado em DEV.
+  POST /r/uploadDocumentosPorProcesso (multipart, todos os campos) → 302 /r/pagamentoIngresso (envio real em
+                           DEV em 22/10/2026). ATENÇÃO: depois do envio o legado continua mostrando o formulário;
+                           reenviar duplicaria os documentos. O portal consulta os enviados antes (abaixo).
+  GET  /r/documentosPorProcessoCandidato?q=base64("{concurso}separadorb64{candidato}") → documentos já entregues:
+                           <td class="col-data-documento|aceito|motivo-recusa|data-entrega">, código no
+                           openModalWindown('id','código',…); Aceito: title Pendente | Sim | Não.
 
 Produção com mais de uma instância do BFF: trocar o dicionário em memória por Redis.
 """
@@ -37,6 +42,7 @@ import unicodedata
 from dataclasses import dataclass, field
 
 import httpx
+from PIL import Image
 
 from app.core.errors import GENERIC_LOGIN, LyceumIndisponivel, PortalError
 from app.core.http import TLS_CONTEXT
@@ -44,7 +50,8 @@ from app.core.validators import digits, mask_cep, normalizar_data_br
 from app.schemas.candidato import Candidato, CandidatoUpdate, Endereco, Municipio
 from app.schemas.documento import DocumentoStatus, EnvioDocumentosResultado, OcrResultado, TipoDocumento
 from app.schemas.inscricao import Inscricao
-from app.services.lyceum.catalogo import REGRA_POR_TIPO
+from app.services.imagens import preparar_imagem
+from app.services.lyceum.catalogo import REGRA_POR_TIPO, TIPOS_DOCUMENTO
 from app.services.lyceum.mappers import normalizar_situacao
 
 log = logging.getLogger("lyceum")
@@ -54,6 +61,9 @@ CACHE_HISTORICO = 30  # s; o histórico é consultado em toda rota de inscriçã
 LIMITE_ANEXOS = 40 * 1024 * 1024  # memória por inscrição até o envio final
 CACHE_TIPOS_DOCUMENTO = 300  # s
 UPLOAD_TIMEOUT = 120.0
+FOTO_MAX_PX, FOTO_QUALIDADE = 2000, 85  # foto enviada ao Lyceum: legível para a secretaria, ~300-600 KB
+_TAMANHO_JAVA_RE = re.compile(r"(FileSizeLimitExceeded|SizeLimitExceeded|MaxUploadSizeExceeded)", re.IGNORECASE)
+_TITULO_RE = re.compile(r"<title>(.*?)</title>", re.DOTALL | re.IGNORECASE)
 
 ID_PESSOA_RE = re.compile(r'id="idPessoa"[^>]*?value="(\d+)"', re.DOTALL)
 MSG_ERRO_RE = re.compile(r'id="msgErro"[^>]*?value="([^"]*)"', re.DOTALL)
@@ -111,10 +121,13 @@ class SessoesLegado:
 
 
 class ClienteLegado:
-    def __init__(self, base_url: str, timeout: float, sessoes: SessoesLegado):
+    def __init__(self, base_url: str, timeout: float, sessoes: SessoesLegado,
+                 max_kb_arquivo: int = 2048, max_kb_total: int = 8192):
         self.base = base_url.rstrip("/")
         self.timeout = timeout
         self.sessoes = sessoes
+        self.max_arquivo = max_kb_arquivo * 1024
+        self.max_total = max_kb_total * 1024
 
     def _client(self, cookies: httpx.Cookies | None = None) -> httpx.AsyncClient:
         # Um cliente por chamada: os cookies de um candidato nunca se misturam com os de outro.
@@ -279,19 +292,54 @@ class ClienteLegado:
     def _anexos(self, sid: str | None, cod_candidato: str) -> dict[str, Anexo]:
         return self.sessoes.obter(sid).anexos.setdefault(cod_candidato, {})
 
-    async def documentos(self, sid: str | None, cod_candidato: str) -> list[DocumentoStatus]:
-        anexos = self._anexos(sid, cod_candidato)
-        return [_status(t, anexos.get(t.codigo)) for t in await self.documentos_exigidos(sid)]
+    async def documentos_entregues(self, sid: str | None, cod_candidato: str,
+                                   cod_concurso: str) -> dict[str, "Entregue"]:
+        """Documentos que o Lyceum já registrou para a inscrição (tela "Documentos Ingresso" do legado)."""
+        q = base64.b64encode(f"{cod_concurso}separadorb64{cod_candidato}".encode()).decode()
+        r = await self.get(sid, "/r/documentosPorProcessoCandidato", params={"q": q})
+        return parse_documentos_entregues(r.text) if r.status_code == 200 else {}
 
-    async def anexar(self, sid: str | None, cod_candidato: str, tipo: str, nome: str, conteudo: bytes, mime: str,
-                     ocr: OcrResultado | None) -> DocumentoStatus:
+    async def documentos(self, sid: str | None, cod_candidato: str, cod_concurso: str) -> list[DocumentoStatus]:
+        entregues = await self.documentos_entregues(sid, cod_candidato, cod_concurso)
+        try:
+            tipos = await self.documentos_exigidos(sid)
+        except PortalError:
+            if not entregues:
+                raise
+            tipos = [t.model_copy(deep=True) for t in TIPOS_DOCUMENTO]  # página fechada: usa o catálogo
+        anexos = self._anexos(sid, cod_candidato)
+        lista = [_status_entregue(t, entregues[t.codigo]) if t.codigo in entregues else _status(t, anexos.get(t.codigo))
+                 for t in tipos]
+        if entregues and all(t.codigo in entregues for t in tipos if t.obrigatorio):
+            self.avancar_etapa(sid, cod_candidato, "pagamento")
+        return lista
+
+    async def anexar(self, sid: str | None, cod_candidato: str, cod_concurso: str, tipo: str, nome: str,
+                     conteudo: bytes, mime: str, ocr: OcrResultado | None) -> DocumentoStatus:
         t = next((x for x in await self.documentos_exigidos(sid) if x.codigo == tipo), None)
         if not t:
             raise PortalError(404, "Documento não solicitado neste processo.")
+        if tipo in await self.documentos_entregues(sid, cod_candidato, cod_concurso):
+            raise PortalError(409, "Este documento já foi enviado ao Lyceum. A secretaria vai conferir.")
         ext = nome.rsplit(".", 1)[-1].lower() if "." in nome else ""
         if ext not in t.extensoes:
             raise PortalError(422, f"Formato não aceito. Envie: {', '.join(e.upper() for e in t.extensoes)}.",
                               {"arquivo": "Formato não aceito."})
+        if mime in ("image/jpeg", "image/png"):
+            # Foto de celular (2-5 MB) é comprimida antes de ir ao Lyceum, que tem limite de tamanho
+            try:
+                menor, mime_menor = preparar_imagem(conteudo, FOTO_MAX_PX, FOTO_QUALIDADE)
+            except (OSError, ValueError, Image.DecompressionBombError):
+                menor = b""
+            if menor and len(menor) < len(conteudo):
+                log.warning("[lyceum-legado] foto %s comprimida: %s KB → %s KB", tipo, len(conteudo) // 1024,
+                            len(menor) // 1024)
+                conteudo, mime = menor, mime_menor
+                nome = nome.rsplit(".", 1)[0] + ".jpg"
+        if len(conteudo) > self.max_arquivo:
+            raise PortalError(422, f"Este arquivo tem {_mb(len(conteudo))}; o limite do Lyceum é "
+                                   f"{_mb(self.max_arquivo)} por arquivo. Reduza o arquivo ou envie uma foto.",
+                              {"arquivo": "Arquivo grande demais."})
         anexos = self._anexos(sid, cod_candidato)
         total = sum(len(a.conteudo) for k, a in anexos.items() if k != tipo) + len(conteudo)
         if total > LIMITE_ANEXOS:
@@ -307,14 +355,24 @@ class ClienteLegado:
         self._anexos(sid, cod_candidato).pop(tipo, None)
         return _status(t, None)
 
-    async def enviar_documentos(self, sid: str | None, cod_candidato: str, simular: bool) -> EnvioDocumentosResultado:
+    async def enviar_documentos(self, sid: str | None, cod_candidato: str, cod_concurso: str,
+                                simular: bool) -> EnvioDocumentosResultado:
         """Monta o multipart igual ao form frm-documentos (um campo por documento; vazio quando não anexado).
 
         simular=True: valida e registra, sem chamar o Lyceum (o POST real FINALIZA a inscrição).
         """
         tipos = await self.documentos_exigidos(sid)
         anexos = self._anexos(sid, cod_candidato)
-        faltando = [t.nome for t in tipos if t.obrigatorio and t.codigo not in anexos]
+        entregues = await self.documentos_entregues(sid, cod_candidato, cod_concurso)
+        for codigo in list(anexos):
+            if codigo in entregues:  # nunca reenviar o que o Lyceum já tem
+                anexos.pop(codigo)
+        if not anexos and entregues and all(t.codigo in entregues for t in tipos if t.obrigatorio):
+            self.avancar_etapa(sid, cod_candidato, "pagamento")
+            return EnvioDocumentosResultado(
+                simulado=False, mensagem="Seus documentos já foram enviados. Siga para o pagamento.",
+                documentos=await self.documentos(sid, cod_candidato, cod_concurso))
+        faltando = [t.nome for t in tipos if t.obrigatorio and t.codigo not in anexos and t.codigo not in entregues]
         if faltando:
             raise PortalError(409, "Anexe os documentos obrigatórios: " + ", ".join(faltando) + ".")
         files = [(t.codigo, (anexos[t.codigo].nome, anexos[t.codigo].conteudo, anexos[t.codigo].mime)
@@ -328,21 +386,47 @@ class ClienteLegado:
                 mensagem="Envio simulado (ambiente de desenvolvimento): nada foi enviado ao Lyceum.",
                 documentos=[_status(t, anexos.get(t.codigo)) for t in tipos])
 
+        total = sum(len(a.conteudo) for a in anexos.values())
+        if total > self.max_total:
+            maiores = sorted(((len(anexos[t.codigo].conteudo), t.nome) for t in tipos if t.codigo in anexos), reverse=True)
+            lista = ", ".join(f"{n} ({_mb(b)})" for b, n in maiores[:2])
+            raise PortalError(422, f"Os documentos somam {_mb(total)}; o limite por envio do Lyceum é "
+                                   f"{_mb(self.max_total)}. Troque os maiores por arquivos menores: {lista}.")
+        log.warning("[lyceum-legado] ENVIO REAL POST /r/uploadDocumentosPorProcesso: %s | total %s KB", resumo,
+                    total // 1024)
         r = await self._req(sid, "POST", "/r/uploadDocumentosPorProcesso", files=files, timeout=UPLOAD_TIMEOUT)
         destino = r.headers.get("location", "")
-        if r.status_code in (302, 303) and "pagamentoIngresso" in destino:
-            enviados = [_status(t, anexos.get(t.codigo)) for t in tipos]
-            for d in enviados:
-                if d.status == "anexado":
-                    d.status = "enviado"
-            anexos.clear()
-            self.invalidar_historico(sid)
-            self.avancar_etapa(sid, cod_candidato, "pagamento")
-            return EnvioDocumentosResultado(simulado=False, mensagem="Documentos enviados.", documentos=enviados)
-        msg = r.headers.get("mensagem") or (MSG_ERRO_RE.search(r.text)[1] if MSG_ERRO_RE.search(r.text) else "")
+        erro_legado = r.headers.get("mensagem") or (MSG_ERRO_RE.search(r.text)[1] if MSG_ERRO_RE.search(r.text) else "")
+        titulo = _TITULO_RE.search(r.text)
+        log.warning("[lyceum-legado] resposta do envio: HTTP %s location=%s erro=%s título=%s", r.status_code,
+                    destino or "-", "sim" if erro_legado else "não",
+                    " ".join(html.unescape(titulo[1]).split())[:80] if titulo else "-")
         if r.status_code == 413:
-            msg = "Os arquivos excedem o tamanho máximo permitido pelo Lyceum."
-        raise PortalError(422, html.unescape(msg) or "O Processo Seletivo não aceitou os documentos.")
+            raise PortalError(422, f"O envio passou do limite de tamanho do Lyceum ({_mb(total)} no total). "
+                                   "Troque os maiores arquivos por versões menores.")
+        if r.status_code >= 500 and _TAMANHO_JAVA_RE.search(r.text):
+            raise PortalError(422, "Um dos arquivos passou do limite por arquivo do Lyceum. "
+                                   "Troque o maior arquivo por uma versão menor e tente de novo.")
+        aceito = r.status_code in (302, 303) and "pagamentoIngresso" in destino
+        if not aceito and not erro_legado and r.status_code in (200, 302, 303):
+            # Resposta diferente da esperada: confirma pelo estado do legado antes de dizer "erro"
+            # (dizer erro com os documentos já enviados levaria o candidato a reenviar).
+            aceito = await self._etapa_pagamento_aberta(sid)
+        if not aceito:
+            raise PortalError(422, html.unescape(erro_legado) or "O Processo Seletivo não aceitou os documentos.")
+
+        enviados = [_status(t, anexos.get(t.codigo)) for t in tipos]
+        for d in enviados:
+            if d.status == "anexado":
+                d.status, d.observacao = "enviado", None
+        anexos.clear()
+        self.invalidar_historico(sid)
+        self.avancar_etapa(sid, cod_candidato, "pagamento")
+        return EnvioDocumentosResultado(simulado=False, mensagem="Documentos enviados.", documentos=enviados)
+
+    async def _etapa_pagamento_aberta(self, sid: str | None) -> bool:
+        r = await self.get(sid, "/r/pagamentoIngresso")
+        return r.status_code == 200 and "Ocorreu um erro" not in r.text
 
     def invalidar_historico(self, sid: str | None) -> None:
         try:
@@ -548,3 +632,39 @@ def multipart_como_navegador(campos: list[tuple[str, tuple[str, bytes, str]]]) -
         partes.append(cabecalho.encode() + conteudo + CRLF.encode())
     corpo = b"".join(partes) + f"--{boundary}--{CRLF}".encode()
     return corpo, f"multipart/form-data; boundary={boundary}"
+
+
+# ---------- documentos já entregues: /r/documentosPorProcessoCandidato ----------
+@dataclass
+class Entregue:
+    aceito: str  # "Pendente" | "Sim" | "Não"
+    motivo: str | None
+    data: str | None
+
+
+_ENTREGUE_COD_RE = re.compile(r"openModalWindown\('[^']*',\s*'([^']+)'")
+_ENTREGUE_COL_RE = re.compile(r'<td[^>]*class="[^"]*col-data-([a-z-]+)[^"]*"[^>]*>(.*?)</td>', re.DOTALL | re.IGNORECASE)
+
+
+def parse_documentos_entregues(pagina: str) -> dict[str, Entregue]:
+    itens: dict[str, Entregue] = {}
+    for tr in _TR_RE.findall(pagina):
+        cod = _ENTREGUE_COD_RE.search(tr)
+        if not cod:
+            continue
+        col = {k.lower(): v for k, v in _ENTREGUE_COL_RE.findall(tr)}
+        aceito = re.search(r'title="([^"]*)"', col.get("aceito", ""))
+        itens[cod[1]] = Entregue(aceito=html.unescape(aceito[1]).strip() if aceito else "Pendente",
+                                 motivo=_vazio(_texto(col.get("motivo-recusa", ""))) or None,
+                                 data=_vazio(_texto(col.get("data-entrega", ""))) or None)
+    return itens
+
+
+def _status_entregue(t: TipoDocumento, e: Entregue) -> DocumentoStatus:
+    # Para o candidato, documento entregue é "enviado". Aceite ou recusa é processo interno da secretaria
+    # (tela de aceite de documentos do Lyceum) e não aparece no portal.
+    return DocumentoStatus(**t.model_dump(), status="enviado", enviado_em=e.data)
+
+
+def _mb(n: int) -> str:
+    return f"{n / 1024 / 1024:.1f} MB".replace(".", ",")

@@ -9,10 +9,15 @@ import respx
 
 from app.core.errors import PortalError
 from app.schemas.documento import OcrResultado
-from app.services.lyceum.legado import ClienteLegado, SessoesLegado, parse_documentos
+from app.services.lyceum.legado import (
+    ClienteLegado,
+    SessoesLegado,
+    parse_documentos,
+    parse_documentos_entregues,
+)
 
 LEG = "https://legado.exemplo/ps"
-SID, CAND = "sid-doc", "2027100000285"
+SID, CAND, CONC = "sid-doc", "2027100000285", "1363"
 
 
 def _doc(codigo, titulo, obrigatorio=False):
@@ -49,10 +54,27 @@ def test_parse_documentos_da_pagina_real():
     assert tipos[0].nome == "Cartão de Vacina" and tipos[4].regra == "foto"
 
 
-def _cliente(pagina=DOCS_HTML):
+def _entregue(id_, codigo, titulo, aceito="Pendente", motivo="", data="22/10/26"):
+    return (f'<tr><td data-title="Documento" class="txt-center col-data-documento">{titulo}</td>'
+            f'<td class="txt-center col-data-aceito"><span class="neutro" id="aceito" title="{aceito}"></span></td>'
+            f'<td class="txt-center col-data-motivo-recusa">{motivo}</td>'
+            f'<td class="txt-center col-data-data-entrega">{data}</td>'
+            f"""<td class="txt-center col-data-envio"><button onclick="openModalWindown('{id_}','{codigo}','"""
+            f"""{titulo}','Ingresso');"></button></td></tr>""")
+
+
+NENHUM_ENTREGUE = "<p>Não foram enviados documentos para esta inscrição.</p>"
+ENTREGUES_HTML = ("<table><tbody>" + _entregue("51", "02", "Declaração") + _entregue("52", "04", "Identidade", "Sim")
+                  + _entregue("53", "05", "CPF", "Não", "Foto ilegível") + _entregue("54", "03", "Histórico")
+                  + "</tbody></table>")
+
+
+def _cliente(pagina=DOCS_HTML, entregues=NENHUM_ENTREGUE):
     s = SessoesLegado()
     s.criar(SID, httpx.Cookies())
     respx.get(f"{LEG}/r/documentosPorProcesso").mock(return_value=httpx.Response(200, text=pagina))
+    respx.route(method="GET", url__startswith=f"{LEG}/r/documentosPorProcessoCandidato").mock(
+        return_value=httpx.Response(200, text=entregues))
     return ClienteLegado(LEG, 5, s)
 
 
@@ -60,7 +82,7 @@ def _cliente(pagina=DOCS_HTML):
 async def test_pagina_bloqueada_sem_salvar_dados():
     cl = _cliente(ERRO_HTML)
     with pytest.raises(PortalError) as e:
-        await cl.documentos(SID, CAND)
+        await cl.documentos(SID, CAND, CONC)
     assert e.value.status == 409 and "Confirme seus dados" in e.value.mensagem
 
 
@@ -68,27 +90,27 @@ async def test_pagina_bloqueada_sem_salvar_dados():
 async def test_anexar_listar_remover():
     cl = _cliente()
     ok = OcrResultado(veredito="ok")
-    st = await cl.anexar(SID, CAND, "05", "cpf.pdf", PDF, "application/pdf", ok)
+    st = await cl.anexar(SID, CAND, CONC, "05", "cpf.pdf", PDF, "application/pdf", ok)
     assert (st.status, st.arquivo, st.observacao) == ("anexado", "cpf.pdf", None)
-    div = await cl.anexar(SID, CAND, "04", "rg.png", b"\x89PNG", "image/png", OcrResultado(veredito="divergente"))
+    div = await cl.anexar(SID, CAND, CONC, "04", "rg.png", b"\x89PNG", "image/png", OcrResultado(veredito="divergente"))
     assert div.observacao == "Será conferido pela secretaria."
-    lista = {d.codigo: d.status for d in await cl.documentos(SID, CAND)}
+    lista = {d.codigo: d.status for d in await cl.documentos(SID, CAND, CONC)}
     assert lista == {"14": "pendente", "03": "pendente", "05": "anexado", "04": "anexado", "01": "pendente"}
     assert (await cl.remover_anexo(SID, CAND, "04")).status == "pendente"
     with pytest.raises(PortalError) as e:
-        await cl.anexar(SID, CAND, "99", "x.pdf", PDF, "application/pdf", ok)
+        await cl.anexar(SID, CAND, CONC, "99", "x.pdf", PDF, "application/pdf", ok)
     assert e.value.status == 404
     with pytest.raises(PortalError) as e:
-        await cl.anexar(SID, CAND, "05", "x.docx", b"PK", "application/msword", ok)
+        await cl.anexar(SID, CAND, CONC, "05", "x.docx", b"PK", "application/msword", ok)
     assert e.value.status == 422
 
 
 @respx.mock
 async def test_envio_exige_obrigatorios():
     cl = _cliente()
-    await cl.anexar(SID, CAND, "05", "cpf.pdf", PDF, "application/pdf", None)
+    await cl.anexar(SID, CAND, CONC, "05", "cpf.pdf", PDF, "application/pdf", None)
     with pytest.raises(PortalError) as e:
-        await cl.enviar_documentos(SID, CAND, simular=True)
+        await cl.enviar_documentos(SID, CAND, CONC, simular=True)
     assert e.value.status == 409 and "Documento de Identidade" in e.value.mensagem
 
 
@@ -97,8 +119,8 @@ async def test_envio_simulado_nao_chama_o_lyceum():
     cl = _cliente()
     upload = respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=httpx.Response(303))
     for c in ("03", "05", "04"):
-        await cl.anexar(SID, CAND, c, f"{c}.pdf", PDF, "application/pdf", None)
-    r = await cl.enviar_documentos(SID, CAND, simular=True)
+        await cl.anexar(SID, CAND, CONC, c, f"{c}.pdf", PDF, "application/pdf", None)
+    r = await cl.enviar_documentos(SID, CAND, CONC, simular=True)
     assert r.simulado and "nada foi enviado" in r.mensagem
     assert not upload.called  # o POST real FINALIZA a inscrição: nunca em modo simulação
     assert cl.sessoes.obter(SID).etapas[CAND] == "pagamento"
@@ -111,8 +133,8 @@ async def test_envio_real_monta_multipart_igual_ao_form():
     upload = respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(
         return_value=httpx.Response(303, headers={"Location": "/processo-seletivo/r/pagamentoIngresso"}))
     for c in ("03", "05", "04"):
-        await cl.anexar(SID, CAND, c, f"doc{c}.pdf", PDF, "application/pdf", None)
-    r = await cl.enviar_documentos(SID, CAND, simular=False)
+        await cl.anexar(SID, CAND, CONC, c, f"doc{c}.pdf", PDF, "application/pdf", None)
+    r = await cl.enviar_documentos(SID, CAND, CONC, simular=False)
     assert not r.simulado and {d.codigo: d.status for d in r.documentos}["05"] == "enviado"
     corpo = upload.calls.last.request.content
     assert upload.calls.last.request.headers["content-type"].startswith("multipart/form-data")
@@ -127,9 +149,9 @@ async def test_envio_real_recusado_pelo_lyceum():
     respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(
         return_value=httpx.Response(500, headers={"mensagem": "Documento excede o tamanho"}))
     for c in ("03", "05", "04"):
-        await cl.anexar(SID, CAND, c, f"{c}.pdf", PDF, "application/pdf", None)
+        await cl.anexar(SID, CAND, CONC, c, f"{c}.pdf", PDF, "application/pdf", None)
     with pytest.raises(PortalError) as e:
-        await cl.enviar_documentos(SID, CAND, simular=False)
+        await cl.enviar_documentos(SID, CAND, CONC, simular=False)
     assert e.value.status == 422 and e.value.mensagem == "Documento excede o tamanho"
 
 
@@ -138,9 +160,9 @@ async def test_lista_de_documentos_em_cache_e_etapa_no_historico():
     from app.services.lyceum.legado import CACHE_HISTORICO  # noqa: F401
     cl = _cliente()
     pagina = respx.routes[0]
-    await cl.documentos(SID, CAND)
-    await cl.anexar(SID, CAND, "05", "a.pdf", PDF, "application/pdf", None)
-    await cl.documentos(SID, CAND)
+    await cl.documentos(SID, CAND, CONC)
+    await cl.anexar(SID, CAND, CONC, "05", "a.pdf", PDF, "application/pdf", None)
+    await cl.documentos(SID, CAND, CONC)
     assert pagina.call_count == 1  # página lida uma vez só
     cl.avancar_etapa(SID, CAND, "pagamento")
     from app.schemas.inscricao import Inscricao
@@ -150,3 +172,125 @@ async def test_lista_de_documentos_em_cache_e_etapa_no_historico():
     s.historico = (__import__("time").monotonic(), [insc])  # cache quente
     (i,) = await cl.historico(SID)
     assert i.etapa_atual == "pagamento" and i.acoes == ["continuar_matricula"]
+
+
+@respx.mock
+async def test_envio_real_resposta_200_confirmada_pela_pagina_de_pagamento():
+    """Legado devolve 200 (não redireciona): o portal confere a etapa de pagamento antes de dizer erro."""
+    cl = _cliente()
+    respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=httpx.Response(200, text="<html>ok</html>"))
+    pag = respx.get(f"{LEG}/r/pagamentoIngresso").mock(return_value=httpx.Response(200, text="<form>pagamento</form>"))
+    for c in ("03", "05", "04"):
+        await cl.anexar(SID, CAND, CONC, c, f"{c}.pdf", PDF, "application/pdf", None)
+    r = await cl.enviar_documentos(SID, CAND, CONC, simular=False)
+    assert not r.simulado and pag.called
+
+
+@respx.mock
+async def test_envio_real_200_sem_pagamento_e_erro():
+    cl = _cliente()
+    respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=httpx.Response(200, text="<html></html>"))
+    respx.get(f"{LEG}/r/pagamentoIngresso").mock(return_value=httpx.Response(200, text="<p>Ocorreu um erro.</p>"))
+    for c in ("03", "05", "04"):
+        await cl.anexar(SID, CAND, CONC, c, f"{c}.pdf", PDF, "application/pdf", None)
+    with pytest.raises(PortalError):
+        await cl.enviar_documentos(SID, CAND, CONC, simular=False)
+
+
+def test_parse_documentos_entregues():
+    e = parse_documentos_entregues(ENTREGUES_HTML)
+    assert set(e) == {"02", "04", "05", "03"}
+    assert (e["04"].aceito, e["05"].aceito, e["05"].motivo, e["02"].data) == ("Sim", "Não", "Foto ilegível", "22/10/26")
+    assert parse_documentos_entregues(NENHUM_ENTREGUE) == {}
+
+
+@respx.mock
+async def test_lista_usa_o_que_o_lyceum_ja_registrou_mesmo_com_a_pagina_fechada():
+    cl = _cliente(pagina=ERRO_HTML, entregues=ENTREGUES_HTML)
+    st = {d.codigo: (d.status, d.enviado_em) for d in await cl.documentos(SID, CAND, CONC)}
+    # aceito, pendente ou recusado na secretaria: para o candidato é só "enviado"
+    assert st["02"] == st["04"] == st["05"] == st["03"] == ("enviado", "22/10/26")
+    assert st["01"][0] == "pendente"
+    assert cl.sessoes.obter(SID).etapas[CAND] == "pagamento"  # obrigatórios entregues → segue para pagamento
+
+
+@respx.mock
+async def test_nao_anexa_documento_ja_entregue():
+    cl = _cliente(entregues=ENTREGUES_HTML)
+    with pytest.raises(PortalError) as e:
+        await cl.anexar(SID, CAND, CONC, "05", "cpf.pdf", PDF, "application/pdf", None)
+    assert e.value.status == 409 and "já foi enviado" in e.value.mensagem
+
+
+@respx.mock
+async def test_nunca_reenvia_quando_o_lyceum_ja_tem_os_obrigatorios():
+    """Depois do envio o legado continua mostrando o formulário: reenviar duplicaria os documentos."""
+    cl = _cliente(entregues=ENTREGUES_HTML)
+    upload = respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=httpx.Response(302))
+    r = await cl.enviar_documentos(SID, CAND, CONC, simular=False)
+    assert not upload.called and "já foram enviados" in r.mensagem
+
+
+# ---------- tamanho: compressão de fotos e limites do Lyceum ----------
+def _foto_grande() -> bytes:
+    """JPEG de 'celular' (3000x4000 com ruído): vários MB."""
+    import io
+    import os
+
+    from PIL import Image
+    img = Image.frombytes("RGB", (3000, 4000), os.urandom(3000 * 4000 * 3))
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=95)
+    return buf.getvalue()
+
+
+@respx.mock
+async def test_foto_de_celular_e_comprimida_antes_de_ir_ao_lyceum():
+    cl = _cliente()
+    foto = _foto_grande()
+    assert len(foto) > 4 * 1024 * 1024
+    st = await cl.anexar(SID, CAND, CONC, "04", "rg.png", foto, "image/png", None)
+    anexo = cl.sessoes.obter(SID).anexos[CAND]["04"]
+    assert st.arquivo == "rg.jpg" and anexo.mime == "image/jpeg"
+    assert len(anexo.conteudo) < 2048 * 1024  # dentro do limite por arquivo
+
+
+@respx.mock
+async def test_pdf_acima_do_limite_por_arquivo_e_recusado_no_anexo():
+    cl = _cliente()
+    pdf_grande = b"%PDF-1.4" + b"0" * (3 * 1024 * 1024)
+    with pytest.raises(PortalError) as e:
+        await cl.anexar(SID, CAND, CONC, "03", "historico.pdf", pdf_grande, "application/pdf", None)
+    assert e.value.status == 422 and "3,0 MB" in e.value.mensagem and "2,0 MB por arquivo" in e.value.mensagem
+
+
+@respx.mock
+async def test_total_acima_do_limite_nao_chega_a_enviar():
+    s = SessoesLegado()
+    s.criar(SID, httpx.Cookies())
+    respx.get(f"{LEG}/r/documentosPorProcesso").mock(return_value=httpx.Response(200, text=DOCS_HTML))
+    respx.route(method="GET", url__startswith=f"{LEG}/r/documentosPorProcessoCandidato").mock(
+        return_value=httpx.Response(200, text=NENHUM_ENTREGUE))
+    cl = ClienteLegado(LEG, 5, s, max_kb_arquivo=1024, max_kb_total=2048)
+    upload = respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=httpx.Response(302))
+    pdf = b"%PDF-1.4" + b"0" * (900 * 1024)
+    for c in ("03", "05", "04"):
+        await cl.anexar(SID, CAND, CONC, c, f"{c}.pdf", pdf, "application/pdf", None)
+    with pytest.raises(PortalError) as e:
+        await cl.enviar_documentos(SID, CAND, CONC, simular=False)
+    assert not upload.called and "limite por envio" in e.value.mensagem
+
+
+@respx.mock
+@pytest.mark.parametrize("resposta,trecho", [
+    (httpx.Response(413, text="<title>413 Request Entity Too Large</title>"), "limite de tamanho do Lyceum"),
+    (httpx.Response(500, text="<title>Erro</title>FileSizeLimitExceededException: ..."), "limite por arquivo"),
+])
+async def test_erros_de_tamanho_do_legado_viram_mensagens_claras(resposta, trecho):
+    cl = _cliente()
+    respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=resposta)
+    for c in ("03", "05", "04"):
+        await cl.anexar(SID, CAND, CONC, c, f"{c}.pdf", PDF, "application/pdf", None)
+    with pytest.raises(PortalError) as e:
+        await cl.enviar_documentos(SID, CAND, CONC, simular=False)
+    assert e.value.status == 422 and trecho in e.value.mensagem

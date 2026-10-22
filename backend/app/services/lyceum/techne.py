@@ -86,7 +86,9 @@ class TechneGateway:
         self.s = settings
         self.client = client
         self.legado = ClienteLegado(settings.lyceum_legado_base_url, settings.lyceum_timeout_leitura,
-                                    sessoes or SessoesLegado())
+                                    sessoes or SessoesLegado(),
+                                    max_kb_arquivo=settings.lyceum_upload_max_kb_por_arquivo,
+                                    max_kb_total=settings.lyceum_upload_max_kb_total)
 
     @property
     def _usa_legado(self) -> bool:
@@ -287,7 +289,7 @@ class TechneGateway:
         # Legado: lista lida da página real /r/documentosPorProcesso + anexos guardados no servidor
         if self._usa_legado:
             self._exigir_convocado(insc)
-            return await self.legado.documentos(sessao_atual.get(), insc.cod_candidato)
+            return await self.legado.documentos(sessao_atual.get(), insc.cod_candidato, insc.cod_concurso)
         self._endpoint("listar_documentos")
 
     async def enviar_documento(self, cod_pessoa, insc, tipo, nome_arquivo, conteudo, mime, ocr):
@@ -295,7 +297,8 @@ class TechneGateway:
         # com timeout de upload e atenção ao client_max_body_size do nginx (413 com ~3,9 MB em TST).
         if self._usa_legado:
             self._exigir_convocado(insc)
-            return await self.legado.anexar(sessao_atual.get(), insc.cod_candidato, tipo, nome_arquivo, conteudo,
+            return await self.legado.anexar(sessao_atual.get(), insc.cod_candidato, insc.cod_concurso, tipo, nome_arquivo,
+                                            conteudo,
                                             mime, ocr)
         self._endpoint("enviar_documento")
 
@@ -308,7 +311,7 @@ class TechneGateway:
     async def enviar_documentos(self, cod_pessoa, insc):
         if self._usa_legado:
             self._exigir_convocado(insc)
-            return await self.legado.enviar_documentos(sessao_atual.get(), insc.cod_candidato,
+            return await self.legado.enviar_documentos(sessao_atual.get(), insc.cod_candidato, insc.cod_concurso,
                                                        simular=self.s.lyceum_documentos_modo != "enviar")
         self._endpoint("enviar_documento")
 

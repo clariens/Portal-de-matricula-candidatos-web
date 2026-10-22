@@ -207,8 +207,8 @@ class MockGateway:
         if faltando:
             raise PortalError(409, "Anexe os documentos obrigatórios: " + ", ".join(faltando) + ".")
         for d in docs.values():
-            if d.status == "anexado":
-                d.status = "em_conferencia" if d.ocr_veredito != "ok" else "enviado"
+            if d.status == "anexado":  # para o candidato, só "enviado" (aceite é da secretaria)
+                d.status, d.observacao = "enviado", None
         self._avancar(insc.cod_candidato, "pagamento")
         return EnvioDocumentosResultado(simulado=False, mensagem="Documentos enviados.",
                                         documentos=await self.listar_documentos(cod_pessoa, insc))

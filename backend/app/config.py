@@ -26,6 +26,9 @@ class Settings(BaseSettings):
     #  "simular": valida e registra o que seria enviado, sem chamar o Lyceum (padrão; use em DEV)
     #  "enviar":  envia de verdade
     lyceum_documentos_modo: Literal["simular", "enviar"] = "simular"
+    # Limites de tamanho do Lyceum (provisórios: confirmar com o time Lyceum). Fotos são comprimidas antes do envio.
+    lyceum_upload_max_kb_por_arquivo: int = 2048
+    lyceum_upload_max_kb_total: int = 8192
 
     # Conferência de documentos com IA (Claude). Sem chave ou desativada: conferência no navegador (OCR local).
     anthropic_api_key: str = ""

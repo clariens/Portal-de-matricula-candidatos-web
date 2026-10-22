@@ -37,6 +37,20 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
   pedido (marcas por código, ex.: "CADASTRO DE PESSOAS FÍSICAS", "REGISTRO GERAL"). Sequência: legível → tipo → dados.
   Selos ✓ conferido / ⚠ ressalva / ✗ com a mensagem na linha. Documento ilegível ou não reconhecido só aceita outro
   arquivo (o backend também recusa); dados divergentes permitem outro arquivo ou conferência manual.
+- **Envio real dos documentos ao Lyceum** (`LYCEUM_DOCUMENTOS_MODO=enviar`): validado em DEV em 22/10/2026 com a
+  inscrição de teste 2027100000285. `POST /r/uploadDocumentosPorProcesso` → 302 `/r/pagamentoIngresso`, e os 4
+  obrigatórios aparecem em "Documentos Ingresso" com data de entrega. Se a resposta vier diferente do esperado, o
+  portal confirma pela abertura da etapa de pagamento antes de acusar erro.
+- **Envio recusado por tamanho (422) corrigido**: fotos JPG/PNG passam a ser comprimidas no anexo (rotação EXIF,
+  ≤ 2000 px, JPEG 85%, de 2–5 MB para ~300–600 KB) antes de ir ao Lyceum; limites provisórios por arquivo (2 MB) e
+  por envio (8 MB) checados antes do POST, com mensagem dizendo o tamanho e quais arquivos trocar; respostas 413 e
+  500 `SizeLimitExceeded` do legado viram mensagens claras; o log registra status, título da página de erro e total
+  enviado; na tela, o erro do envio aparece também em aviso flutuante e a página rola até ele.
+- **Sem reenvio duplicado**: depois do envio o legado continua mostrando o formulário de upload. O portal passa a ler
+  os documentos já entregues em `/r/documentosPorProcessoCandidato` (fonte da verdade): mostra Enviado / Aceito /
+  "Enviado" (com a data) mesmo em sessão nova, não deixa anexar documento já entregue e não refaz o POST quando
+  o Lyceum já tem os obrigatórios (só avança para o pagamento). Aceite/recusa é processo interno da secretaria
+  (tela de aceite de documentos do Lyceum) e não aparece para o candidato.
 - **Conferência de documentos com IA (Claude, visão) no servidor**: o Claude lê e classifica (tipo, frente/verso,
   legibilidade, nome, CPF, RG, nascimento, ano, CEP) em JSON validado por schema; as regras do backend decidem.
   Testado com fotos reais de RG em DEV: frente e verso identificados, verso girado lido corretamente, RG no lugar do

@@ -12,7 +12,6 @@ acima dele a conferência automática pausa e os documentos seguem para conferê
 
 import asyncio
 import base64
-import io
 import json
 import logging
 import time
@@ -20,10 +19,11 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 import anthropic
-from PIL import Image, ImageOps
+from PIL import Image
 from pydantic import BaseModel, ValidationError
 
 from app.config import Settings
+from app.services.imagens import preparar_imagem
 
 log = logging.getLogger("ia")
 
@@ -136,20 +136,6 @@ class ResultadoIA:
     tokens_saida: int
     custo_usd: float
     segundos: float
-
-
-def preparar_imagem(conteudo: bytes, max_px: int) -> tuple[bytes, str]:
-    """Corrige a rotação do celular (EXIF), converte para JPEG e reduz para `max_px` no maior lado."""
-    img = Image.open(io.BytesIO(conteudo))
-    img = ImageOps.exif_transpose(img)
-    if img.mode not in ("RGB", "L"):
-        fundo = Image.new("RGB", img.size, "white")
-        fundo.paste(img, mask=img.convert("RGBA").split()[-1])
-        img = fundo
-    img.thumbnail((max_px, max_px), Image.Resampling.LANCZOS)
-    saida = io.BytesIO()
-    img.convert("RGB").save(saida, "JPEG", quality=88, optimize=True)
-    return saida.getvalue(), "image/jpeg"
 
 
 class LeitorDocumentos:

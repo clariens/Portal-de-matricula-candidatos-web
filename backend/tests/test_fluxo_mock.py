@@ -121,7 +121,7 @@ def test_fluxo_completo(logged):
     env = logged.post(f"/api/v1/inscricoes/{INSC}/envio-documentos", headers=H)
     assert env.status_code == 200 and env.json()["simulado"] is False
     st = {d["codigo"]: d["status"] for d in env.json()["documentos"]}
-    assert st["05"] == "enviado" and st["11"] == "em_conferencia" and st["01"] == "pendente"
+    assert st["05"] == "enviado" and st["11"] == "enviado" and st["01"] == "pendente"
 
     assert logged.post(f"/api/v1/inscricoes/{INSC}/cupons/validar", json={"codigo": "NAOEXISTE"},
                        headers=H).json()["valido"] is False
