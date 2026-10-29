@@ -35,6 +35,11 @@ def mask_cpf(v: str) -> str:
     return f"{c[:3]}.{c[3:6]}.{c[6:9]}-{c[9:11]}" if len(c) == 11 else v
 
 
+def mask_cnpj(v: str) -> str:
+    c = digits(v)
+    return f"{c[:2]}.{c[2:5]}.{c[5:8]}/{c[8:12]}-{c[12:14]}" if len(c) == 14 else v
+
+
 def mask_cep(v: str) -> str:
     c = digits(v)
     return f"{c[:5]}-{c[5:8]}" if len(c) == 8 else v

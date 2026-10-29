@@ -16,9 +16,9 @@ type Form = Omit<CandidatoUpdate, "endereco" | "telefone" | "cpf" | "identidade"
 };
 
 // Valores aceitos pelo Lyceum (mesma lista do select do portal legado)
-const ESTADOS_CIVIS = ["Solteiro", "Casado", "Divorciado", "Viúvo", "União Estável", "Marital", "Separado",
+export const ESTADOS_CIVIS = ["Solteiro", "Casado", "Divorciado", "Viúvo", "União Estável", "Marital", "Separado",
   "Separado Consensualmente", "Separado Judicialmente"];
-const SEXOS: [string, string][] = [["F", "Feminino"], ["M", "Masculino"], ["O", "Outros"]];
+export const SEXOS: [string, string][] = [["F", "Feminino"], ["M", "Masculino"], ["O", "Outros"]];
 
 function paraForm(c: Candidato): Form {
   return {

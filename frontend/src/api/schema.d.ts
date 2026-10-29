@@ -492,7 +492,7 @@ export interface components {
             /** Numparcelas */
             numParcelas: number;
             /** Valorparcela */
-            valorParcela: number;
+            valorParcela?: number | null;
             /** Vencimento */
             vencimento?: string | null;
             /** Instrucoes */
@@ -536,6 +536,8 @@ export interface components {
             mensagem: string;
             /** Descontopercentual */
             descontoPercentual?: number | null;
+            /** Descontovalor */
+            descontoValor?: number | null;
             /** Planos */
             planos?: components["schemas"]["Plano"][] | null;
         };
@@ -765,6 +767,13 @@ export interface components {
             /** Situacao */
             situacao: string;
             cobranca: components["schemas"]["Cobranca"];
+            /**
+             * Simulado
+             * @default false
+             */
+            simulado: boolean;
+            /** Mensagem */
+            mensagem?: string | null;
         };
         /** Pessoa */
         Pessoa: {
@@ -800,9 +809,9 @@ export interface components {
             /** Numparcelas */
             numParcelas: number;
             /** Valorparcela */
-            valorParcela: number;
+            valorParcela?: number | null;
             /** Valortotal */
-            valorTotal: number;
+            valorTotal?: number | null;
             /**
              * Disponivel
              * @default true
@@ -840,12 +849,18 @@ export interface components {
             sexo?: ("M" | "F" | "O") | null;
             /** Estadocivil */
             estadoCivil?: string | null;
+            /** Rg */
+            rg?: string | null;
             /** Email */
-            email: string;
+            email?: string | null;
             /** Celular */
-            celular: string;
+            celular?: string | null;
             /** Telefone */
             telefone?: string | null;
+            /** Inscricaoestadual */
+            inscricaoEstadual?: string | null;
+            /** Inscricaomunicipal */
+            inscricaoMunicipal?: string | null;
             endereco: components["schemas"]["Endereco"];
         };
         /** Uf */

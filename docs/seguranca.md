@@ -14,7 +14,7 @@ Quem tem o Basic consegue agir em nome de **qualquer** candidato, porque o Lyceu
 ## Sessão
 - Cookie `portal_session`: assinado com `PORTAL_SESSION_SECRET` (itsdangerous), `HttpOnly`, `SameSite=Lax`, `Secure` em
   produção (`PORTAL_COOKIE_SECURE=true`), expira em `PORTAL_SESSION_HORAS` (12 h).
-- O backend **recusa iniciar** em `LYCEUM_MODE=techne` com o segredo padrão.
+- O backend **recusa iniciar** com o segredo de sessão padrão ou sem a configuração do Lyceum.
 - CSRF: SameSite=Lax mais exigência de `X-Requested-With` em métodos mutáveis. Um formulário cross-site não consegue enviar esse header.
 
 ## Upload

@@ -26,15 +26,18 @@ FRONT_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     s = get_settings()
-    if s.lyceum_mode == "techne" and s.portal_session_secret in ("dev-inseguro", "troque-este-segredo"):
-        raise RuntimeError("Defina PORTAL_SESSION_SECRET antes de usar LYCEUM_MODE=techne")
+    if s.portal_session_secret in ("dev-inseguro", "troque-este-segredo"):
+        raise RuntimeError("Defina PORTAL_SESSION_SECRET no backend/.env")
+    # Os testes automáticos trocam a fábrica por um dublê (backend/tests/fake_lyceum.py); o app só conhece o Lyceum real
+    fabrica = getattr(app.state, "gateway_factory", build_gateway)
     async with httpx.AsyncClient(verify=TLS_CONTEXT) as client:
-        app.state.gateway = build_gateway(s, client)
+        app.state.gateway = fabrica(s, client)
         # conferência de documentos com IA (Claude) só com chave configurada e ativada
         app.state.leitor = LeitorDocumentos(s) if s.ia_documentos_ativa and s.anthropic_api_key else None
         app.state.tentativas_ia = {}
         logging.getLogger("portal").info(
-            "Portal iniciado em modo %s | conferência de documentos: %s", s.lyceum_mode,
+            "Portal iniciado | Lyceum %s (login: %s) | conferência de documentos: %s", s.lyceum_api_base_url or "-",
+            s.lyceum_auth_modo,
             f"IA ({s.ia_documentos_modelo}, teto US${s.ia_documentos_limite_diario_usd:.2f}/dia)" if app.state.leitor
             else "navegador (OCR local)")
         yield
@@ -71,9 +74,8 @@ async def recursos(request: Request):
 
 @app.get("/api/v1/health", tags=["infra"])
 async def health(request: Request):
-    s = get_settings()
     ok = await request.app.state.gateway.ping()
-    return JSONResponse({"status": "ok" if ok else "degradado", "modo": s.lyceum_mode, "lyceum": ok},
+    return JSONResponse({"status": "ok" if ok else "degradado", "lyceum": ok},
                         status_code=200 if ok else 503)
 
 

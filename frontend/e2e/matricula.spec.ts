@@ -21,7 +21,7 @@ async function documento(page: Page, linhas: string[], nome: string, mime = "ima
 
 const docRow = (page: Page, nome: string) => page.locator(".doc", { has: page.getByRole("heading", { name: nome, exact: true }) });
 
-test("fluxo completo de matrícula (mock)", async ({ page }) => {
+test("fluxo completo de matrícula (dublê do Lyceum)", async ({ page }) => {
   // login
   await page.goto("/");
   await expect(page).toHaveURL(/\/login/);
@@ -125,6 +125,14 @@ test("fluxo completo de matrícula (mock)", async ({ page }) => {
   await page.getByLabel("Código do cupom").fill("CLARIENS10");
   await page.getByRole("button", { name: "Aplicar" }).click();
   await expect(page.getByText("Cupom aplicado: 10% de desconto.")).toBeVisible();
+  // como no legado, nenhuma forma vem marcada; outra pessoa pede os mesmos campos do formulário do legado
+  await page.getByRole("button", { name: "Confirmar pagamento" }).click();
+  await expect(page.getByText("Escolha a forma de pagamento.")).toBeVisible();
+  await page.locator("label.choice", { hasText: "Outra pessoa" }).click();
+  await page.getByRole("button", { name: "Confirmar pagamento" }).click();
+  await expect(page.getByText("Selecione o estado civil.")).toBeVisible();
+  await expect(page.getByLabel("Telefone")).toBeVisible();
+  await page.locator("label.choice", { hasText: "Eu mesmo(a)" }).click();
   await page.locator("label.choice", { hasText: "Boleto" }).click();
   await page.getByRole("button", { name: "Confirmar pagamento" }).click();
 

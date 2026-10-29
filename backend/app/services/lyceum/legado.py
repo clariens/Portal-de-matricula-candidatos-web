@@ -25,6 +25,12 @@ Contrato observado em DEV (20/10/2026):
   POST /r/uploadDocumentosPorProcesso (multipart, todos os campos) → 302 /r/pagamentoIngresso (envio real em
                            DEV em 22/10/2026). ATENÇÃO: depois do envio o legado continua mostrando o formulário;
                            reenviar duplicaria os documentos. O portal consulta os enviados antes (abaixo).
+  GET  /r/pagamentoIngresso → <form id="frm-pagamento"> (só abre depois de dados → documentos NA MESMA sessão;
+                           antes disso responde 302). Planos em <select id="planoPagamento"> com valor
+                           "planoPadrao:codigoPlano:formaPagamento:numParcelas"; a página não informa valores.
+  POST /r/pagamentoIngresso/validarvoucher (form "voucher=…") → lyceumRetorno.item[0] {descPercValor, desconto}
+  POST /r/pagamentoIngresso/efetivar.json → corpo = form serializado (só os campos do tipo de responsável ativo;
+                           os demais ficam desabilitados no legado) → CRIA A MATRÍCULA; depois /r/terminoIngresso.
   GET  /r/documentosPorProcessoCandidato?q=base64("{concurso}separadorb64{candidato}") → documentos já entregues:
                            <td class="col-data-documento|aceito|motivo-recusa|data-entrega">, código no
                            openModalWindown('id','código',…); Aceito: title Pendente | Sim | Não.
@@ -46,10 +52,18 @@ from PIL import Image
 
 from app.core.errors import GENERIC_LOGIN, LyceumIndisponivel, PortalError
 from app.core.http import TLS_CONTEXT
-from app.core.validators import digits, mask_cep, normalizar_data_br
+from app.core.validators import digits, mask_cep, mask_cnpj, mask_cpf, normalizar_data_br
 from app.schemas.candidato import Candidato, CandidatoUpdate, Endereco, Municipio
 from app.schemas.documento import DocumentoStatus, EnvioDocumentosResultado, OcrResultado, TipoDocumento
 from app.schemas.inscricao import Inscricao
+from app.schemas.pagamento import (
+    Cobranca,
+    CupomResultado,
+    OpcoesPagamento,
+    PagamentoIn,
+    PagamentoResultado,
+    Plano,
+)
 from app.services.imagens import preparar_imagem
 from app.services.lyceum.catalogo import REGRA_POR_TIPO, TIPOS_DOCUMENTO
 from app.services.lyceum.mappers import normalizar_situacao
@@ -174,7 +188,7 @@ class ClienteLegado:
 
     async def _req(self, sid: str | None, method: str, path: str, *, params: dict | None = None,
                    json: object = None, ajax: bool = False, files: list | None = None,
-                   timeout: float | None = None) -> httpx.Response:
+                   timeout: float | None = None, data: dict | None = None) -> httpx.Response:
         s = self.sessoes.obter(sid)
         headers = {"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"} if ajax else {}
         content = None
@@ -183,7 +197,7 @@ class ClienteLegado:
         try:
             async with self._client(s.cookies) as c:
                 r = await c.request(method, path, params=params, json=json, headers=headers, content=content,
-                                    timeout=timeout or self.timeout)
+                                    data=data, timeout=timeout or self.timeout)
                 s.cookies = httpx.Cookies(c.cookies)
         except httpx.HTTPError:
             raise LyceumIndisponivel("Não foi possível conectar ao Processo Seletivo") from None
@@ -261,19 +275,115 @@ class ClienteLegado:
     async def atualizar_candidato(self, sid: str | None, cod_candidato: str, cod_concurso: str,
                                   dados: CandidatoUpdate) -> Candidato:
         campos = await self.form_ingresso(sid, cod_candidato, cod_concurso)  # estado fresco + campos ocultos
-        end = dados.endereco
-        codigo = end.municipio_codigo
-        if not codigo:
-            alvo = _fold(end.municipio)
-            achados = [m for m in await self.municipios(sid, end.uf, end.municipio) if _fold(m.nome) == alvo]
-            if not achados:
-                raise PortalError(422, "Revise os campos destacados.",
-                                  {"endereco.municipio": "Cidade não encontrada nesta UF. Use o CEP para preencher."})
-            codigo = achados[0].codigo
+        codigo = await self._codigo_municipio(sid, dados.endereco, "endereco.municipio")
         await self.post_json(sid, "/r/ingresso/atualizar.json", payload_atualizar(campos, dados, codigo))
         self.invalidar_historico(sid)
         self.avancar_etapa(sid, cod_candidato, "documentos")
         return await self.candidato(sid, cod_candidato, cod_concurso)
+
+    async def _codigo_municipio(self, sid: str | None, end: Endereco, campo: str) -> str:
+        """Código Lyceum do município (vem do CEP; se a cidade foi digitada, procura pelo nome na UF)."""
+        if end.municipio_codigo:
+            return end.municipio_codigo
+        alvo = _fold(end.municipio)
+        achados = [m for m in await self.municipios(sid, end.uf, end.municipio) if _fold(m.nome) == alvo]
+        if not achados:
+            raise PortalError(422, "Revise os campos destacados.",
+                              {campo: "Cidade não encontrada nesta UF. Use o CEP para preencher."})
+        return achados[0].codigo
+
+    # ---------- etapa 2: pagamento ----------
+    async def _pagina_pagamento(self, sid: str | None) -> str:
+        """Abre /r/pagamentoIngresso. O legado só libera a página depois de passar por dados → documentos
+        na mesma sessão; tenta reabrir os documentos uma vez antes de pedir para o candidato confirmar os dados."""
+        for tentativa in range(2):
+            r = await self.get(sid, "/r/pagamentoIngresso")
+            if r.status_code == 200 and 'id="frm-pagamento"' in r.text:
+                return r.text
+            if tentativa == 0:
+                await self.get(sid, "/r/documentosPorProcesso")
+        raise PortalError(409, "Confirme seus dados e documentos para seguir ao pagamento.")
+
+    async def opcoes_pagamento(self, sid: str | None) -> OpcoesPagamento:
+        pagina = parse_pagamento(await self._pagina_pagamento(sid))
+        return OpcoesPagamento(tipos_responsavel=pagina.tipos_responsavel or ["Pessoa"], planos=pagina.planos)
+
+    async def validar_cupom(self, sid: str | None, codigo: str) -> CupomResultado:
+        await self._pagina_pagamento(sid)
+        r = await self._req(sid, "POST", "/r/pagamentoIngresso/validarvoucher", data={"voucher": codigo}, ajax=True)
+        try:
+            ret = r.json().get("lyceumRetorno") or {}
+        except (ValueError, AttributeError):
+            ret = {}
+        itens = ret.get("item") if ret.get("tipo") == "OK" else None
+        if not itens:
+            return CupomResultado(valido=False, mensagem=ret.get("mensagem") or "Cupom não encontrado para este curso.")
+        v = itens[0] or {}
+        desconto = float(v.get("desconto") or 0)
+        if str(v.get("descPercValor", "")).lower().startswith("valor"):
+            return CupomResultado(valido=True, mensagem=f"Cupom aplicado: desconto de {_brl(desconto)}.",
+                                  desconto_valor=desconto)
+        return CupomResultado(valido=True, mensagem=f"Cupom aplicado: {desconto:g}% de desconto.",
+                              desconto_percentual=desconto)
+
+    async def efetivar_pagamento(self, sid: str | None, cod_candidato: str, dados: PagamentoIn,
+                                 simular: bool) -> PagamentoResultado:
+        pagina = parse_pagamento(await self._pagina_pagamento(sid))
+        plano = next((p for p in pagina.planos if p.codigo == dados.codigo_plano), None)
+        if not plano:
+            raise PortalError(422, "Escolha uma forma de pagamento.", {"codigoPlano": "Escolha um plano."})
+        if not plano.disponivel:
+            raise PortalError(422, plano.motivo_indisponivel or "Forma de pagamento indisponível.",
+                              {"codigoPlano": "Indisponível."})
+        if dados.tipo_resp not in pagina.tipos_responsavel:
+            raise PortalError(422, "Tipo de responsável financeiro não disponível.", {"tipoResp": "Indisponível."})
+        corpo = await self._payload_pagamento(sid, dados, plano)
+        cobranca = Cobranca(forma_pagamento=plano.forma_pagamento, num_parcelas=plano.num_parcelas,
+                            instrucoes=INSTRUCOES_PAGAMENTO.get(plano.forma_pagamento, INSTRUCOES_PAGAMENTO["Boleto"]))
+        resumo = f"tipoResp={dados.tipo_resp} plano={plano.codigo} voucher={'sim' if dados.voucher else 'não'}"
+        if simular:
+            log.warning("[lyceum-legado] SIMULAÇÃO POST /r/pagamentoIngresso/efetivar.json (não enviado): %s | campos=%s",
+                        resumo, sorted(k for k, v in corpo.items() if v is not None))
+            return PagamentoResultado(situacao="Convocado", cobranca=cobranca, simulado=True,
+                                      mensagem="Pagamento simulado (ambiente de desenvolvimento): nada foi enviado "
+                                               "ao Lyceum e a matrícula não foi criada.")
+        log.warning("[lyceum-legado] ENVIO REAL POST /r/pagamentoIngresso/efetivar.json: %s", resumo)
+        await self.post_json(sid, "/r/pagamentoIngresso/efetivar.json", corpo)
+        self.invalidar_historico(sid)
+        self.avancar_etapa(sid, cod_candidato, "conclusao")
+        return PagamentoResultado(situacao="Pré-Matriculado", cobranca=cobranca, mensagem="Pagamento registrado.")
+
+    async def _payload_pagamento(self, sid: str | None, d: PagamentoIn, plano: Plano) -> dict[str, str | None]:
+        """Corpo igual ao frm-pagamento serializado: só os campos do tipo de responsável escolhido
+        (o legado desabilita os outros). Cartão sempre vazio na fase 1. verificafraudeInput/requerTelefoneInput
+        ficam fora do <form> no legado e por isso não vão no corpo."""
+        padrao, codigo, forma, parcelas = plano.codigo.split(":", 3)
+        p: dict[str, str | None] = {
+            "tipoResp": d.tipo_resp, "voucher": d.voucher,
+            "planoPadrao": padrao, "codigoPlano": codigo, "formaPagamento": forma, "numParcelas": parcelas,
+            "numeroCartao": None, "titularCartao": None, "mesValidadeCartao": None, "anoValidadeCartao": None,
+            "codSegurancaCartao": None, "docPortadorCartao": None,
+        }
+        r = d.responsavel
+        if r:
+            end = r.endereco
+            p.update({
+                "titular": r.nome, "cep": mask_cep(end.cep), "enderecoUf": end.uf,
+                "enderecoMunicipio": await self._codigo_municipio(sid, end, "responsavel.endereco.municipio"),
+                "endereco": end.endereco, "enderecoNum": end.numero, "enderecoCompl": end.complemento,
+                "enderecoBairro": end.bairro,
+            })
+            if d.tipo_resp == "OutraPessoa":
+                cel, tel = digits(r.celular), digits(r.telefone)
+                p.update({
+                    "dataNascimento": normalizar_data_br(r.data_nascimento), "sexo": r.sexo, "cpf": mask_cpf(r.documento),
+                    "rg": r.rg, "passaporte": None, "estadoCivil": r.estado_civil, "email": r.email,
+                    "dddFone": tel[:2], "fone": tel[2:], "dddCelular": cel[:2], "celular": cel[2:],
+                })
+            else:
+                p.update({"cnpj": mask_cnpj(r.documento), "inscrEstadual": r.inscricao_estadual,
+                          "inscrMunicipal": r.inscricao_municipal})
+        return {k: (None if v in (None, "") else re.sub(r"</?[^>]+(>|$)", "", str(v))) for k, v in p.items()}
 
     # ---------- etapa 1b: documentos ----------
     async def documentos_exigidos(self, sid: str | None) -> list[TipoDocumento]:
@@ -372,6 +482,10 @@ class ClienteLegado:
             return EnvioDocumentosResultado(
                 simulado=False, mensagem="Seus documentos já foram enviados. Siga para o pagamento.",
                 documentos=await self.documentos(sid, cod_candidato, cod_concurso))
+        if entregues:
+            # Depois do primeiro envio o legado ignora /r/uploadDocumentosPorProcesso (responde 200 sem gravar):
+            # documentos novos vão um a um pela rota da tela "Documentos Ingresso".
+            return await self._enviar_avulsos(sid, cod_candidato, cod_concurso, tipos, anexos, simular)
         faltando = [t.nome for t in tipos if t.obrigatorio and t.codigo not in anexos and t.codigo not in entregues]
         if faltando:
             raise PortalError(409, "Anexe os documentos obrigatórios: " + ", ".join(faltando) + ".")
@@ -407,26 +521,67 @@ class ClienteLegado:
         if r.status_code >= 500 and _TAMANHO_JAVA_RE.search(r.text):
             raise PortalError(422, "Um dos arquivos passou do limite por arquivo do Lyceum. "
                                    "Troque o maior arquivo por uma versão menor e tente de novo.")
-        aceito = r.status_code in (302, 303) and "pagamentoIngresso" in destino
-        if not aceito and not erro_legado and r.status_code in (200, 302, 303):
-            # Resposta diferente da esperada: confirma pelo estado do legado antes de dizer "erro"
-            # (dizer erro com os documentos já enviados levaria o candidato a reenviar).
-            aceito = await self._etapa_pagamento_aberta(sid)
-        if not aceito:
+        if erro_legado or r.status_code not in (200, 302, 303):
             raise PortalError(422, html.unescape(erro_legado) or "O Processo Seletivo não aceitou os documentos.")
+        # A resposta HTTP não basta (o legado responde 200 mesmo sem gravar): só conta o que aparece em
+        # "Documentos Ingresso". Dizer "enviado" sem estar lá faria o candidato achar que entregou.
+        return await self._confirmar_envio(sid, cod_candidato, cod_concurso, tipos, anexos, list(anexos))
 
-        enviados = [_status(t, anexos.get(t.codigo)) for t in tipos]
-        for d in enviados:
-            if d.status == "anexado":
-                d.status, d.observacao = "enviado", None
-        anexos.clear()
+    async def _enviar_avulsos(self, sid: str | None, cod_candidato: str, cod_concurso: str,
+                              tipos: list[TipoDocumento], anexos: dict[str, "Anexo"],
+                              simular: bool) -> EnvioDocumentosResultado:
+        """Documento novo depois do primeiro envio: POST /r/documentosCandidato/upload, um por vez, com o campo
+        de arquivo "<código>,Ingresso" (igual ao modal de upload da tela Documentos Ingresso)."""
+        if not anexos:
+            raise PortalError(409, "Anexe um documento para enviar.")
+        resumo = ", ".join(f"{c}={len(a.conteudo)}B" for c, a in anexos.items())
+        if simular:
+            log.warning("[lyceum-legado] SIMULAÇÃO POST /r/documentosCandidato/upload (não enviado): %s", resumo)
+            return EnvioDocumentosResultado(
+                simulado=True, mensagem="Envio simulado (ambiente de desenvolvimento): nada foi enviado ao Lyceum.",
+                documentos=await self.documentos(sid, cod_candidato, cod_concurso))
+        log.warning("[lyceum-legado] ENVIO REAL POST /r/documentosCandidato/upload: %s", resumo)
+        tentados, recusas = [], []
+        for codigo, a in list(anexos.items()):
+            r = await self._req(sid, "POST", "/r/documentosCandidato/upload", ajax=True, timeout=UPLOAD_TIMEOUT,
+                                files=[(f"{codigo},Ingresso", (a.nome, a.conteudo, a.mime))])
+            log.warning("[lyceum-legado] resposta do upload %s: HTTP %s", codigo, r.status_code)
+            nome = next((t.nome for t in tipos if t.codigo == codigo), codigo)
+            if r.status_code == 413:
+                recusas.append(f"{nome}: arquivo maior que o limite do Lyceum")
+            elif not 200 <= r.status_code < 300:
+                recusas.append(f"{nome}: {html.unescape(r.headers.get('mensagem') or 'não aceito pelo Lyceum')}")
+            else:
+                tentados.append(codigo)
+        if recusas and not tentados:
+            raise PortalError(422, "O Processo Seletivo não aceitou: " + "; ".join(recusas) + ".")
+        resultado = await self._confirmar_envio(sid, cod_candidato, cod_concurso, tipos, anexos, tentados)
+        if recusas:
+            resultado.mensagem += " Não foram aceitos: " + "; ".join(recusas) + "."
+        return resultado
+
+    async def _confirmar_envio(self, sid: str | None, cod_candidato: str, cod_concurso: str,
+                               tipos: list[TipoDocumento], anexos: dict[str, "Anexo"],
+                               enviados: list[str]) -> EnvioDocumentosResultado:
+        """Confere em "Documentos Ingresso" o que o Lyceum gravou; tira dos anexos só o que foi confirmado."""
+        entregues = await self.documentos_entregues(sid, cod_candidato, cod_concurso)
+        confirmados = [c for c in enviados if c in entregues]
+        faltam = [next((t.nome for t in tipos if t.codigo == c), c) for c in enviados if c not in entregues]
+        for c in confirmados:
+            anexos.pop(c, None)
+        log.warning("[lyceum-legado] conferência do envio: gravados=%s não gravados=%s", confirmados or "-",
+                    [c for c in enviados if c not in entregues] or "-")
+        if not confirmados:
+            raise PortalError(422, "O Processo Seletivo não registrou os documentos. Tente novamente; "
+                                   "se continuar, procure a secretaria.")
         self.invalidar_historico(sid)
-        self.avancar_etapa(sid, cod_candidato, "pagamento")
-        return EnvioDocumentosResultado(simulado=False, mensagem="Documentos enviados.", documentos=enviados)
-
-    async def _etapa_pagamento_aberta(self, sid: str | None) -> bool:
-        r = await self.get(sid, "/r/pagamentoIngresso")
-        return r.status_code == 200 and "Ocorreu um erro" not in r.text
+        if all(t.codigo in entregues for t in tipos if t.obrigatorio):
+            self.avancar_etapa(sid, cod_candidato, "pagamento")
+        mensagem = "Documentos enviados."
+        if faltam:
+            mensagem = f"Documentos enviados, exceto: {', '.join(faltam)}. Tente enviar esses de novo."
+        return EnvioDocumentosResultado(simulado=False, mensagem=mensagem,
+                                        documentos=await self.documentos(sid, cod_candidato, cod_concurso))
 
     def invalidar_historico(self, sid: str | None) -> None:
         try:
@@ -668,3 +823,47 @@ def _status_entregue(t: TipoDocumento, e: Entregue) -> DocumentoStatus:
 
 def _mb(n: int) -> str:
     return f"{n / 1024 / 1024:.1f} MB".replace(".", ",")
+
+
+# ---------- etapa 2: /r/pagamentoIngresso ----------
+FORMAS = {"BOLETO": "Boleto", "PIX": "PIX", "CARTAO": "Cartao", "CARTÃO": "Cartao"}
+NOMES_FORMA = {"Boleto": "Boleto", "PIX": "PIX", "Cartao": "Cartão de crédito"}
+INSTRUCOES_PAGAMENTO = {
+    "Boleto": "O boleto da 1ª parcela fica disponível em Minhas inscrições.",
+    "PIX": "O PIX da 1ª parcela fica disponível em Minhas inscrições.",
+    "Cartao": "A cobrança é feita no cartão informado.",
+}
+
+
+@dataclass
+class PaginaPagamento:
+    planos: list[Plano]
+    tipos_responsavel: list[str]
+
+
+def parse_pagamento(pagina: str) -> PaginaPagamento:
+    m = re.search(r'<select[^>]*id="planoPagamento"[^>]*>(.*?)</select>', pagina, re.DOTALL | re.IGNORECASE)
+    planos: list[Plano] = []
+    for valor, rotulo in re.findall(r'<option[^>]*value="([^"]*)"[^>]*>(.*?)</option>', m[1] if m else "", re.DOTALL):
+        valor = html.unescape(valor)
+        partes = valor.split(":")
+        if len(partes) != 4 or not partes[1]:
+            continue
+        forma = FORMAS.get(_fold(partes[2]).upper(), FORMAS.get(partes[2].upper(), "Boleto"))
+        texto = _texto(rotulo)
+        descricao = texto.split(":", 1)[1].strip() if ":" in texto else texto
+        cartao = forma == "Cartao"
+        planos.append(Plano(
+            codigo=valor, forma_pagamento=forma, nome=NOMES_FORMA[forma], descricao=descricao,
+            plano_padrao=partes[0], num_parcelas=int(partes[3]) if partes[3].isdigit() else 1,
+            disponivel=not cartao,
+            motivo_indisponivel="Em breve: pagamento por cartão com tokenização segura." if cartao else None,
+            tag="Mais rápido" if forma == "PIX" else None,
+        ))
+    tipos = [t for t in ("Pessoa", "OutraPessoa", "Empresa")
+             if re.search(rf'name="tipoResp"[^>]*value="{t}"', pagina)]
+    return PaginaPagamento(planos=planos, tipos_responsavel=tipos)
+
+
+def _brl(v: float) -> str:
+    return "R$ " + f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")

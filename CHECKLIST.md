@@ -6,7 +6,7 @@ Legenda: `[x]` feito · `[ ]` pendente · **(Lyceum)** depende do time Lyceum/Te
 - [x] Scaffold backend (FastAPI, pydantic-settings, ruff, pytest) e frontend (Vite React TS, vitest)
 - [x] `.env.example`, `.gitignore`, README, CHANGELOG `0.1.0`
 - [x] Contrato da API `/api/v1` (Pydantic → OpenAPI → tipos TS)
-- [x] `LyceumGateway` + `MockGateway` + `TechneGateway` com tabela `ENDPOINTS`
+- [x] `LyceumGateway` + `TechneGateway` (dublê só nos testes) com tabela `ENDPOINTS`
 - [ ] Levantar no Swagger Techne v2 os endpoints de cada necessidade e capturar fixtures mascaradas — **(Lyceum)**
 - [ ] Confirmar se `/v2/pessoas/autenticacao` aceita candidato (CPF/e-mail) e qual id retorna (pessoa vs. candidato) — **(Lyceum)**
 - [ ] Registrar as lacunas sem endpoint v2 como pendências formais com o time Lyceum — **(Lyceum)**
@@ -40,6 +40,11 @@ Legenda: `[x]` feito · `[ ]` pendente · **(Lyceum)** depende do time Lyceum/Te
 - [x] Responsável financeiro: Eu, Outra pessoa (CPF), Empresa (CNPJ) com endereço
 - [x] Boleto e PIX com valor da parcela; cartão desabilitado
 - [x] Cupom com validação imediata e recálculo dos planos
+- [x] Planos, cupom e efetivação pelas rotas do legado (`/r/pagamentoIngresso`, `validarvoucher`, `efetivar.json`)
+- [x] Planos e cupom conferidos em DEV; efetivação validada em simulação
+- [ ] Primeiro `efetivar.json` real em DEV (cria a matrícula): **pedir autorização** e ligar `LYCEUM_PAGAMENTO_MODO=enviar`
+- [ ] Voucher de 100% (o legado troca o plano por `N:N:N:1` e esconde as formas de pagamento)
+- [ ] Valores das parcelas: a página do legado não traz; ver `GET /v2/tabela/concursos` (`boleto_valor`)
 - [ ] `opcoes_pagamento` / `validar_cupom` / `efetivar_pagamento` no Techne v2 — **(Lyceum)**
 - [ ] Gateway de cartão com tokenização (PCI) — decisão de fornecedor
 - [ ] Linha digitável / PIX copia e cola na tela (se o Lyceum devolver)

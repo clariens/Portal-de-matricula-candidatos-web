@@ -103,7 +103,7 @@ LYCEUM_74215025 = {"data": {"municipio": "002174", "nomeMunicipio": "GOIÂNIA", 
 
 
 def _gw_settings():
-    return Settings(_env_file=None, lyceum_mode="techne", lyceum_api_base_url=BASE, lyceum_api_basic_user="u",
+    return Settings(_env_file=None, lyceum_api_base_url=BASE, lyceum_api_basic_user="u",
                     lyceum_api_basic_password="p")
 
 

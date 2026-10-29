@@ -1,17 +1,21 @@
 import os
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Sempre o backend/.env, de qualquer pasta onde o servidor seja iniciado (antes era relativo à pasta atual e,
+# iniciado da raiz do projeto, o .env não era lido)
+ENV_PADRAO = Path(__file__).resolve().parents[1] / ".env"
 
 
 class Settings(BaseSettings):
     # PORTAL_ENV_FILE permite isolar os testes do backend/.env real
     model_config = SettingsConfigDict(
-        env_file=os.getenv("PORTAL_ENV_FILE", ".env"), env_file_encoding="utf-8", extra="ignore"
+        env_file=os.getenv("PORTAL_ENV_FILE", str(ENV_PADRAO)), env_file_encoding="utf-8", extra="ignore"
     )
 
-    lyceum_mode: Literal["mock", "techne"] = "mock"
     lyceum_api_base_url: str = ""
     lyceum_api_basic_user: str = ""
     lyceum_api_basic_password: str = ""
@@ -20,12 +24,15 @@ class Settings(BaseSettings):
     # Como o candidato é autenticado (ver docs/integracao-techne.md):
     #  "techne": POST /v2/pessoas/autenticacao — só aceita ALUNO por RA
     #  "legado": j_security_check do portal Processo Seletivo — aceita candidato por CPF/e-mail
-    lyceum_auth_modo: Literal["techne", "legado"] = "techne"
+    lyceum_auth_modo: Literal["techne", "legado"] = "legado"
     lyceum_legado_base_url: str = ""  # ex.: https://desenvolvimento-lyceum.clariens.com.br/processo-seletivo
     # Envio final dos documentos (POST /r/uploadDocumentosPorProcesso) FINALIZA a inscrição no Lyceum.
     #  "simular": valida e registra o que seria enviado, sem chamar o Lyceum (padrão; use em DEV)
     #  "enviar":  envia de verdade
     lyceum_documentos_modo: Literal["simular", "enviar"] = "simular"
+    # Confirmar pagamento (POST /r/pagamentoIngresso/efetivar.json) CRIA A MATRÍCULA no Lyceum.
+    #  "simular": valida e registra o que seria enviado (padrão) | "enviar": envia de verdade
+    lyceum_pagamento_modo: Literal["simular", "enviar"] = "simular"
     # Limites de tamanho do Lyceum (provisórios: confirmar com o time Lyceum). Fotos são comprimidas antes do envio.
     lyceum_upload_max_kb_por_arquivo: int = 2048
     lyceum_upload_max_kb_total: int = 8192

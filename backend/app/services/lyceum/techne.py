@@ -321,12 +321,23 @@ class TechneGateway:
             raise PortalError(409, "Esta inscrição não está aberta para matrícula.")
 
     async def opcoes_pagamento(self, cod_pessoa, insc):
+        if self._usa_legado:
+            self._exigir_convocado(insc)
+            return await self.legado.opcoes_pagamento(sessao_atual.get())
         self._endpoint("opcoes_pagamento")
 
     async def validar_cupom(self, cod_pessoa, insc, codigo):
+        if self._usa_legado:
+            self._exigir_convocado(insc)
+            return await self.legado.validar_cupom(sessao_atual.get(), codigo)
         self._endpoint("validar_cupom")
 
     async def efetivar_pagamento(self, cod_pessoa, insc, dados):
+        # Legado: efetivar.json CRIA A MATRÍCULA; em DEV fica em simulação (LYCEUM_PAGAMENTO_MODO)
+        if self._usa_legado:
+            self._exigir_convocado(insc)
+            return await self.legado.efetivar_pagamento(sessao_atual.get(), insc.cod_candidato, dados,
+                                                        simular=self.s.lyceum_pagamento_modo != "enviar")
         self._endpoint("efetivar_pagamento")
 
     async def obter_matricula(self, cod_pessoa, insc):

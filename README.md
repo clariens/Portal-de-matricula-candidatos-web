@@ -12,7 +12,7 @@ Fluxo do candidato: **Login → Minhas inscrições → Dados → Documentos (OC
 
 | Pasta | Conteúdo |
 |---|---|
-| [backend/](backend/) | BFF FastAPI + httpx, `LyceumGateway` com implementações `mock` e `techne` |
+| [backend/](backend/) | BFF FastAPI + httpx, `LyceumGateway` ligado ao Lyceum (API Techne v2 + portal legado na sessão do candidato) |
 | [frontend/](frontend/) | React 18 + TypeScript + Vite, visual portado do protótipo |
 | [docs/](docs/) | Arquitetura, integração Techne, contrato da API, segurança, OCR, deploy |
 | [CHECKLIST.md](CHECKLIST.md) | Andamento por fase |
@@ -21,7 +21,7 @@ Fluxo do candidato: **Login → Minhas inscrições → Dados → Documentos (OC
 ## Pré-requisitos
 - Python 3.11+ e Node 20+
 
-## Rodar localmente (modo mock, sem Lyceum)
+## Rodar localmente (contra o Lyceum DEV)
 
 ```bash
 # backend
@@ -29,7 +29,7 @@ cd backend
 python -m venv .venv
 .venv/Scripts/activate            # Linux/macOS: source .venv/bin/activate
 pip install -e ".[dev]"
-cp .env.example .env              # LYCEUM_MODE=mock
+cp .env.example .env              # preencha credenciais da API e PORTAL_SESSION_SECRET
 python -m uvicorn app.main:app --reload     # http://127.0.0.1:8000/api/docs
 # (use "python -m uvicorn": nas máquinas Clariens o uvicorn.exe da .venv é bloqueado com "Acesso negado")
 
@@ -39,19 +39,18 @@ npm install                       # o postinstall copia os assets do OCR para pu
 npm run dev                       # http://localhost:5173 (proxy /api → :8000)
 ```
 
-Login de demonstração no modo mock: **CPF `123.456.789-09`**, senha **`demonstracao`**. Cupom de teste: `CLARIENS10`.
-
-## Rodar contra o Lyceum (modo techne)
-No `backend/.env`: `LYCEUM_MODE=techne`, `LYCEUM_API_BASE_URL`, `LYCEUM_API_BASIC_USER`, `LYCEUM_API_BASIC_PASSWORD` e um
-`PORTAL_SESSION_SECRET` forte. Hoje só o **login** está ligado ao Techne v2. As outras rotas respondem **501** até
-seus endpoints serem mapeados. Ver [docs/integracao-techne.md](docs/integracao-techne.md).
+O portal **não tem modo de demonstração**: sempre fala com o Lyceum configurado no `backend/.env`
+(`LYCEUM_API_BASE_URL`, `LYCEUM_API_BASIC_USER`, `LYCEUM_API_BASIC_PASSWORD`, `LYCEUM_LEGADO_BASE_URL` e um
+`PORTAL_SESSION_SECRET` forte). Sem essas variáveis o servidor **não inicia** e diz o que falta. Inicie sempre de
+dentro de `backend/`, onde está o `.env`. Entre com um candidato real do ambiente (CPF e senha do Processo Seletivo).
+Ver [docs/integracao-techne.md](docs/integracao-techne.md).
 
 ## Testes
 
 ```bash
-cd backend && .venv/Scripts/python -m pytest      # 26 testes (fluxo mock, segurança, TechneGateway com respx)
+cd backend && .venv/Scripts/python -m pytest      # fluxo da API com dublê do Lyceum (tests/fake_lyceum.py), legado e Techne com respx
 cd frontend && npm test                           # máscaras, CPF/CNPJ, regras do OCR
-cd frontend && npx playwright install chromium && npm run e2e   # fluxo completo no navegador com OCR real
+cd frontend && npx playwright install chromium && npm run e2e   # fluxo completo no navegador com o dublê do Lyceum (só teste)
 ```
 
 ## Contrato front ⇄ BFF

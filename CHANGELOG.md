@@ -3,6 +3,24 @@
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
+### Corrigido
+- **Documento novo depois do primeiro envio não chegava ao Lyceum** (visto em DEV, 29/10/2026). Depois do primeiro
+  envio, o legado responde 200 a `POST /r/uploadDocumentosPorProcesso` e não grava nada, e o portal dizia
+  "Documentos enviados". Agora:
+  - o primeiro envio continua no lote do `frm-documentos`;
+  - os documentos seguintes vão um a um por `POST /r/documentosCandidato/upload`, com o campo `"<código>,Ingresso"`
+    (a rota do modal da tela "Documentos Ingresso"). Validado em DEV com as certidões de nascimento e casamento;
+  - um documento só conta como enviado quando aparece em "Documentos Ingresso". O que não foi gravado continua
+    anexado, e a mensagem diz qual tentar de novo. Saiu a conferência pela página de pagamento, que dava falso
+    positivo.
+
+### Removido
+- **Modo mock** (`LYCEUM_MODE`): o portal só fala com o Lyceum real. Sem a configuração (`LYCEUM_API_*`,
+  `LYCEUM_LEGADO_BASE_URL`, `PORTAL_SESSION_SECRET`) o servidor não inicia e diz o que falta. Antes, um servidor
+  iniciado sem ler o `.env` subia em mock em silêncio e recusava candidatos reais com "credencial inválida".
+  Os dados fictícios viraram um dublê só de testes (`backend/tests/fake_lyceum.py`, usado pelo pytest e pelo e2e).
+  O aviso de login de demonstração saiu da tela de login. `LYCEUM_AUTH_MODO` passa a ter `legado` como padrão.
+
 ### Adicionado
 - **Login real de candidato (CPF/e-mail + senha) em DEV** com `LYCEUM_AUTH_MODO=legado`: o BFF valida no
   `j_security_check` do Processo Seletivo, lê o `idPessoa` em `/r/alterarDados`, encerra a sessão Java e busca a
@@ -66,6 +84,21 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
   (`enderecoUf`, `paisSelect`), sem os quais o legado recusa o envio.
 - Contexto TLS único no processo (`app/core/http.py`): cada cliente HTTP novo recarregava os certificados (~0,5 s).
 - Sexo "Outros" (`O`) e lista de estado civil do Lyceum (`União Estável`, `Marital`, `Separado …`).
+- **Etapa Pagamento (legado)**:
+  - Planos lidos da página real `/r/pagamentoIngresso` (Boleto, PIX e Cartão em 6 parcelas, com o texto de desconto
+    do Lyceum). O "6" do código do plano é o número de mensalidades do curso, igual nas três formas (não é
+    parcelamento; o legado nem o mostra), e a tela o exibe como "6 mensalidades". A página não traz valores.
+    Cartão segue "Em breve" (PCI).
+  - O legado só abre o pagamento depois de salvar os dados e abrir os documentos na mesma sessão. O BFF tenta
+    reabrir os documentos; se ainda assim estiver fechado, a tela oferece "Revisar meus dados".
+  - Cupom validado em `POST /r/pagamentoIngresso/validarvoucher` (percentual ou valor).
+  - Confirmação monta o mesmo corpo do `frm-pagamento` para `efetivar.json`: só a seção do responsável escolhido,
+    CPF/CNPJ/CEP com máscara, data `dd/mm/aaaa`, código do município do Lyceum, HTML removido, vazio → `null`.
+  - Responsável "Outra pessoa" pede os campos obrigatórios do legado: nascimento, sexo, estado civil, e-mail,
+    celular e telefone (RG opcional). "Empresa" pede CNPJ e inscrições estadual/municipal (opcionais).
+  - Nova configuração `LYCEUM_PAGAMENTO_MODO=simular|enviar` (padrão `simular`): `efetivar.json` **cria a matrícula**.
+    Em simulação nada vai ao Lyceum e a tela avisa que o pagamento foi simulado.
+  - Como no legado, nenhuma forma de pagamento vem marcada.
 
 ### Alterado
 - `codConcurso` de `Inscricao` passou a ser opcional (o histórico legado só o expõe em Convocado/Pré-Matriculado).
@@ -77,6 +110,9 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
 - Logs do httpx em WARNING, para não registrar URLs com dados pessoais.
 
 ### Descoberto
+- **Limite de upload do legado em DEV** (medido em 29/10/2026): 1.000.000 bytes por arquivo (Tomcat, HTTP 500
+  genérico) e 1 MiB por requisição (nginx, HTTP 413). No primeiro envio, a soma dos documentos tem que caber em
+  ~1 MiB. Detalhes em `docs/deploy.md`.
 - `POST /v2/pessoas/autenticacao` autentica **aluno por RA**, não candidato por CPF/e-mail. Candidato sem RA não consegue entrar (ver `docs/integracao-techne.md`).
 - `/v2/tabela/candidatos` expõe `senha_web` aparentemente em texto puro: reportar ao time Lyceum.
 

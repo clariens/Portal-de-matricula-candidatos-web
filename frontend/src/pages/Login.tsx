@@ -81,9 +81,6 @@ export function Login() {
           <span className="eyebrow">Área do candidato</span>
           <h2>Entrar</h2>
         </div>
-        {import.meta.env.DEV && (
-          <p className="demo-note">Desenvolvimento: no modo mock, use CPF 123.456.789-09 e senha "demonstracao".</p>
-        )}
         {erro && <Alert>{erro}</Alert>}
         <div className="grid">
           <Field id="l-user" label="E-mail ou CPF" value={login} onValue={setLogin} cls="" autoComplete="username" />

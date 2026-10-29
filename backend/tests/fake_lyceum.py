@@ -1,4 +1,5 @@
-"""Gateway fictício, em memória, com os dados do protótipo.
+"""Dublê do Lyceum, em memória, com os dados do protótipo. SÓ PARA TESTES AUTOMÁTICOS (pytest e e2e):
+o portal não tem modo de demonstração.
 
 Credenciais de demonstração: login `123.456.789-09` ou `ana.rocha@exemplo.com`, senha `demonstracao`.
 O estado é por processo (reinicia ao reiniciar o servidor).
@@ -57,14 +58,18 @@ INSCRICOES = [
 ]
 
 VALOR_PARCELA = 11480.00  # ilustrativo
+# Mesmo formato do legado (/r/pagamentoIngresso): codigo = "planoPadrao:codigoPlano:formaPagamento:numParcelas"
 PLANOS = [
-    Plano(codigo="PG_PIX", forma_pagamento="PIX", nome="PIX", descricao="Confirmação imediata, QR Code a cada parcela",
-          num_parcelas=6, valor_parcela=VALOR_PARCELA, valor_total=VALOR_PARCELA * 6, tag="Mais rápido"),
-    Plano(codigo="PG_BOLETO", forma_pagamento="Boleto", nome="Boleto", descricao="Compensação em até 2 dias úteis",
+    Plano(codigo="N:PG_BOLETO:Boleto:6", forma_pagamento="Boleto", nome="Boleto",
+          descricao="A modalidade de pagamento com Boleto será aplicado 5% de desconto a partir da 1ª mensalidade",
           num_parcelas=6, valor_parcela=VALOR_PARCELA, valor_total=VALOR_PARCELA * 6),
-    Plano(codigo="PG_CARTÃO", forma_pagamento="Cartao", nome="Cartão de crédito", descricao="Cobrança recorrente no cartão",
-          num_parcelas=6, valor_parcela=VALOR_PARCELA, valor_total=VALOR_PARCELA * 6, disponivel=False,
+    Plano(codigo="N:PG_CARTÃO_A:Cartao:6", forma_pagamento="Cartao", nome="Cartão de crédito",
+          descricao="Cobrança recorrente no cartão", num_parcelas=6, valor_parcela=VALOR_PARCELA,
+          valor_total=VALOR_PARCELA * 6, disponivel=False,
           motivo_indisponivel="Em breve: pagamento por cartão com tokenização segura."),
+    Plano(codigo="N:PG_PIX:PIX:6", forma_pagamento="PIX", nome="PIX",
+          descricao="A modalidade de pagamento com PIX será aplicado 5% de desconto a partir da 1ª mensalidade",
+          num_parcelas=6, valor_parcela=VALOR_PARCELA, valor_total=VALOR_PARCELA * 6, tag="Mais rápido"),
 ]
 CUPONS = {"CLARIENS10": 10.0}
 
@@ -91,7 +96,7 @@ MUNICIPIOS = {
 }
 
 
-class MockGateway:
+class FakeLyceum:
     def __init__(self) -> None:
         self.reset()
 
@@ -270,7 +275,7 @@ class MockGateway:
             raise PortalError(409, "A matrícula ainda não foi gerada. Conclua o pagamento.")
         pg = self.pagamentos.get(insc.cod_candidato)
         cand = await self.obter_candidato(cod_pessoa, insc)
-        cel = pg.responsavel.celular if pg and pg.responsavel else cand.celular
+        cel = (pg.responsavel.celular if pg and pg.responsavel else None) or cand.celular
         return Matricula(
             matricula="2716520002", curso="09-Medicina", turma="MED-2027.1-A", periodo="2027.1",
             unidade=i.unidade, disciplinas=DISCIPLINAS,

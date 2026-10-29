@@ -69,7 +69,7 @@ export function EtapaConclusao() {
         <div className="mat">
           Matrícula<b>{m.matricula}</b>
           {m.formaPagamento}
-          {m.numParcelas ? ` · ${m.numParcelas} parcelas` : ""}
+          {m.numParcelas ? ` · ${m.numParcelas} mensalidades` : ""}
         </div>
       </div>
 
@@ -81,7 +81,7 @@ export function EtapaConclusao() {
           </div>
           <div className="cobranca">
             <span>
-              {cobranca.numParcelas}× <b>{brl(cobranca.valorParcela)}</b>
+              {cobranca.valorParcela != null ? <><b>{brl(cobranca.valorParcela)}</b>/mês · {cobranca.numParcelas} mensalidades</> : `${cobranca.numParcelas} mensalidades`}
               {cobranca.vencimento ? ` · vencimento ${cobranca.vencimento}` : ""}
             </span>
             <span className="muted">{cobranca.instrucoes}</span>

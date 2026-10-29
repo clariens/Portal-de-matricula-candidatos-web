@@ -78,6 +78,20 @@ def _cliente(pagina=DOCS_HTML, entregues=NENHUM_ENTREGUE):
     return ClienteLegado(LEG, 5, s)
 
 
+def _lyceum_grava(rota_envio, entregues_depois):
+    """Documentos Ingresso passa a listar `entregues_depois` assim que a rota de envio é chamada."""
+    respx.route(method="GET", url__startswith=f"{LEG}/r/documentosPorProcessoCandidato").mock(
+        side_effect=lambda req: httpx.Response(200, text=entregues_depois() if rota_envio.called else _ATUAL[0]))
+
+
+_ATUAL = [NENHUM_ENTREGUE]
+
+
+def _tabela(*codigos):
+    return "<table><tbody>" + "".join(_entregue(str(60 + i), c, f"Doc {c}", data="29/10/26")
+                                      for i, c in enumerate(codigos)) + "</tbody></table>"
+
+
 @respx.mock
 async def test_pagina_bloqueada_sem_salvar_dados():
     cl = _cliente(ERRO_HTML)
@@ -134,6 +148,7 @@ async def test_envio_real_monta_multipart_igual_ao_form():
         return_value=httpx.Response(303, headers={"Location": "/processo-seletivo/r/pagamentoIngresso"}))
     for c in ("03", "05", "04"):
         await cl.anexar(SID, CAND, CONC, c, f"doc{c}.pdf", PDF, "application/pdf", None)
+    _lyceum_grava(upload, lambda: _tabela("03", "05", "04"))
     r = await cl.enviar_documentos(SID, CAND, CONC, simular=False)
     assert not r.simulado and {d.codigo: d.status for d in r.documentos}["05"] == "enviado"
     corpo = upload.calls.last.request.content
@@ -175,26 +190,60 @@ async def test_lista_de_documentos_em_cache_e_etapa_no_historico():
 
 
 @respx.mock
-async def test_envio_real_resposta_200_confirmada_pela_pagina_de_pagamento():
-    """Legado devolve 200 (não redireciona): o portal confere a etapa de pagamento antes de dizer erro."""
+async def test_envio_real_200_confirmado_em_documentos_ingresso():
+    """Legado devolve 200 (não redireciona): vale o que aparece em Documentos Ingresso."""
     cl = _cliente()
-    respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=httpx.Response(200, text="<html>ok</html>"))
-    pag = respx.get(f"{LEG}/r/pagamentoIngresso").mock(return_value=httpx.Response(200, text="<form>pagamento</form>"))
+    upload = respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=httpx.Response(200, text="ok"))
     for c in ("03", "05", "04"):
         await cl.anexar(SID, CAND, CONC, c, f"{c}.pdf", PDF, "application/pdf", None)
+    _lyceum_grava(upload, lambda: _tabela("03", "05", "04"))
     r = await cl.enviar_documentos(SID, CAND, CONC, simular=False)
-    assert not r.simulado and pag.called
+    assert not r.simulado and r.mensagem == "Documentos enviados."
+    assert cl.sessoes.obter(SID).etapas[CAND] == "pagamento"
 
 
 @respx.mock
-async def test_envio_real_200_sem_pagamento_e_erro():
+async def test_envio_real_200_sem_gravar_e_erro():
+    """Visto em DEV (29/10/2026): o legado responde 200 e não grava nada. Não pode virar "enviado"."""
     cl = _cliente()
     respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=httpx.Response(200, text="<html></html>"))
-    respx.get(f"{LEG}/r/pagamentoIngresso").mock(return_value=httpx.Response(200, text="<p>Ocorreu um erro.</p>"))
     for c in ("03", "05", "04"):
         await cl.anexar(SID, CAND, CONC, c, f"{c}.pdf", PDF, "application/pdf", None)
-    with pytest.raises(PortalError):
+    with pytest.raises(PortalError) as e:
         await cl.enviar_documentos(SID, CAND, CONC, simular=False)
+    assert "não registrou" in e.value.mensagem
+    assert set(cl._anexos(SID, CAND)) == {"03", "05", "04"}  # continuam anexados para tentar de novo
+
+
+@respx.mock
+async def test_documento_novo_depois_do_primeiro_envio_vai_pela_rota_avulsa():
+    """Com os obrigatórios já entregues, cada documento novo vai por /r/documentosCandidato/upload."""
+    cl = _cliente(entregues=ENTREGUES_HTML)
+    lote = respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=httpx.Response(200))
+    avulso = respx.post(f"{LEG}/r/documentosCandidato/upload").mock(return_value=httpx.Response(204))
+    await cl.anexar(SID, CAND, CONC, "14", "vacina.pdf", PDF, "application/pdf", None)
+    await cl.anexar(SID, CAND, CONC, "01", "foto.pdf", PDF, "application/pdf", None)
+    _ATUAL[0] = ENTREGUES_HTML
+    try:  # o Lyceum grava a vacina e não grava a foto
+        _lyceum_grava(avulso, lambda: ENTREGUES_HTML.replace("</tbody>", _entregue("70", "14", "Vacina") + "</tbody>"))
+        r = await cl.enviar_documentos(SID, CAND, CONC, simular=False)
+    finally:
+        _ATUAL[0] = NENHUM_ENTREGUE
+    assert not lote.called and avulso.call_count == 2
+    campos = [c.request.content for c in avulso.calls]
+    assert b'name="14,Ingresso"; filename="vacina.pdf"' in campos[0] and b'name="01,Ingresso"' in campos[1]
+    st = {d.codigo: d.status for d in r.documentos}
+    assert st["14"] == "enviado" and st["01"] == "anexado" and "exceto: Foto 3X4" in r.mensagem
+    assert set(cl._anexos(SID, CAND)) == {"01"}
+
+
+@respx.mock
+async def test_documento_novo_simulado_nao_chama_o_lyceum():
+    cl = _cliente(entregues=ENTREGUES_HTML)
+    avulso = respx.post(f"{LEG}/r/documentosCandidato/upload").mock(return_value=httpx.Response(204))
+    await cl.anexar(SID, CAND, CONC, "14", "vacina.pdf", PDF, "application/pdf", None)
+    r = await cl.enviar_documentos(SID, CAND, CONC, simular=True)
+    assert r.simulado and not avulso.called
 
 
 def test_parse_documentos_entregues():

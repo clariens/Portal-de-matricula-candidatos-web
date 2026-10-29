@@ -1268,7 +1268,14 @@
             "title": "Numparcelas"
           },
           "valorParcela": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Valorparcela"
           },
           "vencimento": {
@@ -1291,7 +1298,6 @@
         "required": [
           "formaPagamento",
           "numParcelas",
-          "valorParcela",
           "instrucoes"
         ],
         "title": "Cobranca"
@@ -1386,6 +1392,17 @@
               }
             ],
             "title": "Descontopercentual"
+          },
+          "descontoValor": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Descontovalor"
           },
           "planos": {
             "anyOf": [
@@ -2118,6 +2135,22 @@
           },
           "cobranca": {
             "$ref": "#/components/schemas/Cobranca"
+          },
+          "simulado": {
+            "type": "boolean",
+            "title": "Simulado",
+            "default": false
+          },
+          "mensagem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mensagem"
           }
         },
         "type": "object",
@@ -2205,11 +2238,25 @@
             "title": "Numparcelas"
           },
           "valorParcela": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Valorparcela"
           },
           "valorTotal": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Valortotal"
           },
           "disponivel": {
@@ -2246,9 +2293,7 @@
           "formaPagamento",
           "nome",
           "descricao",
-          "numParcelas",
-          "valorParcela",
-          "valorTotal"
+          "numParcelas"
         ],
         "title": "Plano"
       },
@@ -2332,12 +2377,37 @@
             ],
             "title": "Estadocivil"
           },
+          "rg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rg"
+          },
           "email": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Email"
           },
           "celular": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Celular"
           },
           "telefone": {
@@ -2351,6 +2421,28 @@
             ],
             "title": "Telefone"
           },
+          "inscricaoEstadual": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inscricaoestadual"
+          },
+          "inscricaoMunicipal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Inscricaomunicipal"
+          },
           "endereco": {
             "$ref": "#/components/schemas/Endereco"
           }
@@ -2359,8 +2451,6 @@
         "required": [
           "nome",
           "documento",
-          "email",
-          "celular",
           "endereco"
         ],
         "title": "Responsavel"

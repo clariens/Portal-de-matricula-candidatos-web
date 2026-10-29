@@ -71,7 +71,7 @@ def test_upload_rejeita_extensao(logged):
 
 def test_pagamento_exige_documentos(logged):
     logged.put(f"/api/v1/inscricoes/{INSC}/candidato", json=CANDIDATO_OK, headers=H)
-    r = logged.post(f"/api/v1/inscricoes/{INSC}/pagamento", json={"tipoResp": "Pessoa", "codigoPlano": "PG_PIX"},
+    r = logged.post(f"/api/v1/inscricoes/{INSC}/pagamento", json={"tipoResp": "Pessoa", "codigoPlano": "N:PG_PIX:PIX:6"},
                     headers=H)
     assert r.status_code == 409
 
@@ -92,7 +92,7 @@ def test_cartao_indisponivel(logged):
     for t in OBRIGATORIOS:
         _upload(logged, t)
     logged.post(f"/api/v1/inscricoes/{INSC}/envio-documentos", headers=H)
-    r = logged.post(f"/api/v1/inscricoes/{INSC}/pagamento", json={"tipoResp": "Pessoa", "codigoPlano": "PG_CARTÃO"},
+    r = logged.post(f"/api/v1/inscricoes/{INSC}/pagamento", json={"tipoResp": "Pessoa", "codigoPlano": "N:PG_CARTÃO_A:Cartao:6"},
                     headers=H)
     assert r.status_code == 422
 
@@ -101,7 +101,7 @@ def test_responsavel_outra_pessoa_cpf_invalido(logged):
     resp = {"nome": "Maria Rocha", "documento": "000.000.000-00", "dataNascimento": "01/01/1970",
             "email": "maria@exemplo.com", "celular": "34991112222", "endereco": CANDIDATO_OK["endereco"]}
     r = logged.post(f"/api/v1/inscricoes/{INSC}/pagamento",
-                    json={"tipoResp": "OutraPessoa", "responsavel": resp, "codigoPlano": "PG_PIX"}, headers=H)
+                    json={"tipoResp": "OutraPessoa", "responsavel": resp, "codigoPlano": "N:PG_PIX:PIX:6"}, headers=H)
     assert r.status_code == 422
     assert "responsavel.documento" in r.json()["erro"]["campos"]
 
@@ -116,7 +116,7 @@ def test_fluxo_completo(logged):
         assert _upload(logged, t).json()["status"] == "anexado"  # ainda não foi ao Lyceum
     assert _upload(logged, "11", veredito="divergente").json()["observacao"] == "Será conferido pela secretaria."
     # pagar antes de enviar os documentos é recusado
-    assert logged.post(f"/api/v1/inscricoes/{INSC}/pagamento", json={"tipoResp": "Pessoa", "codigoPlano": "PG_PIX"},
+    assert logged.post(f"/api/v1/inscricoes/{INSC}/pagamento", json={"tipoResp": "Pessoa", "codigoPlano": "N:PG_PIX:PIX:6"},
                        headers=H).status_code == 409
     env = logged.post(f"/api/v1/inscricoes/{INSC}/envio-documentos", headers=H)
     assert env.status_code == 200 and env.json()["simulado"] is False
@@ -128,7 +128,7 @@ def test_fluxo_completo(logged):
     cup = logged.post(f"/api/v1/inscricoes/{INSC}/cupons/validar", json={"codigo": "clariens10"}, headers=H).json()
     assert cup["valido"] and cup["planos"][0]["valorParcela"] == 10332.0
 
-    r = logged.post(f"/api/v1/inscricoes/{INSC}/pagamento", json={"tipoResp": "Pessoa", "codigoPlano": "PG_PIX"},
+    r = logged.post(f"/api/v1/inscricoes/{INSC}/pagamento", json={"tipoResp": "Pessoa", "codigoPlano": "N:PG_PIX:PIX:6"},
                     headers=H)
     assert r.status_code == 200 and r.json()["situacao"] == "Pré-Matriculado"
 

@@ -1,8 +1,7 @@
 """Contrato entre o BFF e o Lyceum.
 
-Os routers só conhecem esta interface. Duas implementações:
-- MockGateway: dados fictícios do protótipo, em memória (LYCEUM_MODE=mock)
-- TechneGateway: API REST Techne v2 com Basic de serviço (LYCEUM_MODE=techne)
+Os routers só conhecem esta interface. Implementação: TechneGateway (API REST Techne v2 com Basic de
+serviço + portal legado na sessão do candidato). Os testes automáticos usam um dublê em tests/fake_lyceum.py.
 
 Todos os métodos que operam sobre uma inscrição recebem a `Inscricao` já autorizada
 (ela pertence à pessoa da sessão; ver app/api/deps.py).

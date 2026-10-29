@@ -18,7 +18,7 @@ BASE = "https://tst-lyceum.exemplo/api"
 
 
 def _settings(**kw):
-    d = {"lyceum_mode": "techne", "lyceum_api_base_url": BASE, "lyceum_api_basic_user": "svc",
+    d = {"lyceum_auth_modo": "techne", "lyceum_api_base_url": BASE, "lyceum_api_basic_user": "svc",
              "lyceum_api_basic_password": "pwd", "portal_session_secret": "x"}
     d.update(kw)
     return Settings(_env_file=None, **d)
@@ -247,3 +247,11 @@ async def test_sessao_legado_expirada_no_servidor():
         with pytest.raises(PortalError) as e:
             await gw.listar_inscricoes("100001")
     assert e.value.status == 401
+
+
+def test_sem_configuracao_do_lyceum_o_servidor_nao_inicia():
+    # Não existe modo de demonstração: sem o .env o portal recusa iniciar, em vez de subir com dados fictícios
+    from app.services.lyceum import build_gateway
+
+    with pytest.raises(RuntimeError, match="LYCEUM_API_BASE_URL"):
+        build_gateway(Settings(_env_file=None), httpx.AsyncClient())

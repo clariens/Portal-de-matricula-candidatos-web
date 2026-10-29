@@ -4,10 +4,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 os.environ["PORTAL_ENV_FILE"] = "__sem_env_nos_testes__"  # nunca ler o backend/.env real
-os.environ.setdefault("LYCEUM_MODE", "mock")
 os.environ.setdefault("PORTAL_SESSION_SECRET", "segredo-de-teste")
 
 from app.main import app
+from tests.fake_lyceum import FakeLyceum
+
+app.state.gateway_factory = lambda settings, client: FakeLyceum()
 
 H = {"X-Requested-With": "fetch"}
 INSC = "2027100000162"
