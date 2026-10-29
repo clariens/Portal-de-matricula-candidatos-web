@@ -114,6 +114,15 @@ test("fluxo completo de matrícula (dublê do Lyceum)", async ({ page }) => {
   await vacina.getByRole("button", { name: "Remover" }).click();
   await expect(vacina.locator(".chip")).toHaveCount(0);
 
+  // os anexos ficam no navegador (o servidor não guarda nada): recarregar a página não perde nada
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Seus documentos" })).toBeVisible();
+  await expect(cpfRow.locator(".chip")).toContainText("Conferido · pronto para envio");
+  await expect(cpfRow).toContainText("cpf.png");
+  await expect(rgRow).toContainText("rg.jpg (convertido de WEBP)");
+  await expect(decl.locator(".chip")).toContainText("Para conferência · pronto para envio");
+  await expect(vacina.locator(".chip")).toHaveCount(0); // o removido continua removido
+
   await page.getByRole("button", { name: "Enviar documentos e continuar" }).click();
 
   // etapa 3: pagamento

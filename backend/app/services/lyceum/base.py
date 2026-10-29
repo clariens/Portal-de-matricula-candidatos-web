@@ -11,7 +11,7 @@ from typing import Protocol
 
 from app.schemas.auth import Pessoa
 from app.schemas.candidato import Candidato, CandidatoUpdate, CepResultado, Municipio, Uf
-from app.schemas.documento import DocumentoStatus, EnvioDocumentosResultado, OcrResultado
+from app.schemas.documento import Anexo, DocumentoStatus, EnvioDocumentosResultado, OcrResultado
 from app.schemas.inscricao import Inscricao
 from app.schemas.matricula import ConfirmacaoResultado, Matricula, Questionario
 from app.schemas.pagamento import CupomResultado, OpcoesPagamento, PagamentoIn, PagamentoResultado
@@ -36,7 +36,8 @@ class LyceumGateway(Protocol):
 
     # etapa 1b — documentos
     async def listar_documentos(self, cod_pessoa: str, insc: Inscricao) -> list[DocumentoStatus]: ...
-    async def enviar_documento(
+    # Valida e prepara um documento (sem guardar: o arquivo fica no navegador até o envio final)
+    async def anexar_documento(
         self,
         cod_pessoa: str,
         insc: Inscricao,
@@ -45,10 +46,10 @@ class LyceumGateway(Protocol):
         conteudo: bytes,
         mime: str,
         ocr: OcrResultado | None,
-    ) -> DocumentoStatus: ...
-    async def remover_documento(self, cod_pessoa: str, insc: Inscricao, tipo: str) -> DocumentoStatus: ...
-    # Envia de uma vez os documentos anexados (o legado recebe tudo num único POST e FINALIZA a inscrição)
-    async def enviar_documentos(self, cod_pessoa: str, insc: Inscricao) -> EnvioDocumentosResultado: ...
+    ) -> tuple[DocumentoStatus, Anexo]: ...
+    # Envia os documentos que o navegador devolveu (o legado recebe tudo num único POST e FINALIZA a inscrição)
+    async def enviar_documentos(self, cod_pessoa: str, insc: Inscricao,
+                                anexos: dict[str, Anexo]) -> EnvioDocumentosResultado: ...
 
     # etapa 2 — pagamento
     async def opcoes_pagamento(self, cod_pessoa: str, insc: Inscricao) -> OpcoesPagamento: ...

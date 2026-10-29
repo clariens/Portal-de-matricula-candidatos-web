@@ -435,8 +435,9 @@
         "tags": [
           "inscricoes"
         ],
-        "summary": "Enviar Documento",
-        "operationId": "enviar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post",
+        "summary": "Anexar Documento",
+        "description": "Confere o documento e devolve o resultado com um selo assinado. Nada fica guardado no servidor: o\nnavegador guarda o arquivo + selo e os devolve em POST /envio-documentos.",
+        "operationId": "anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post",
         "parameters": [
           {
             "name": "tipo",
@@ -463,61 +464,11 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/Body_enviar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"
+                "$ref": "#/components/schemas/Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"
               }
             }
           }
         },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DocumentoStatus"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "tags": [
-          "inscricoes"
-        ],
-        "summary": "Remover Documento",
-        "operationId": "remover_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__delete",
-        "parameters": [
-          {
-            "name": "tipo",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Tipo"
-            }
-          },
-          {
-            "name": "cod_candidato",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "pattern": "^\\d{6,20}$",
-              "title": "Cod Candidato"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -548,7 +499,7 @@
           "inscricoes"
         ],
         "summary": "Enviar Documentos",
-        "description": "Envia ao Lyceum, de uma vez, os documentos anexados. No legado isso FINALIZA a inscrição.",
+        "description": "Envia ao Lyceum, de uma vez, os documentos que o navegador guardou (arquivo + selo de cada um).\nNo legado o primeiro envio FINALIZA a inscrição.",
         "operationId": "enviar_documentos_api_v1_inscricoes__cod_candidato__envio_documentos_post",
         "parameters": [
           {
@@ -580,6 +531,16 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "description": "Para cada documento: arquivo_<código> (arquivo) e selo_<código> (o selo devolvido no anexo)."
               }
             }
           }
@@ -888,7 +849,7 @@
   },
   "components": {
     "schemas": {
-      "Body_enviar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post": {
+      "Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post": {
         "properties": {
           "arquivo": {
             "type": "string",
@@ -912,7 +873,7 @@
         "required": [
           "arquivo"
         ],
-        "title": "Body_enviar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"
+        "title": "Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"
       },
       "Candidato": {
         "properties": {
@@ -1559,6 +1520,17 @@
                 "type": "null"
               }
             ]
+          },
+          "selo": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Selo"
           }
         },
         "type": "object",

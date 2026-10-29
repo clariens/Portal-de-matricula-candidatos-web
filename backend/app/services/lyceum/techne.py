@@ -292,27 +292,20 @@ class TechneGateway:
             return await self.legado.documentos(sessao_atual.get(), insc.cod_candidato, insc.cod_concurso)
         self._endpoint("listar_documentos")
 
-    async def enviar_documento(self, cod_pessoa, insc, tipo, nome_arquivo, conteudo, mime, ocr):
+    async def anexar_documento(self, cod_pessoa, insc, tipo, nome_arquivo, conteudo, mime, ocr):
         # Quando mapeado: provável envio em Base64 no JSON (precedente envia_anexo_andamento),
         # com timeout de upload e atenção ao client_max_body_size do nginx (413 com ~3,9 MB em TST).
         if self._usa_legado:
             self._exigir_convocado(insc)
-            return await self.legado.anexar(sessao_atual.get(), insc.cod_candidato, insc.cod_concurso, tipo, nome_arquivo,
-                                            conteudo,
-                                            mime, ocr)
+            return await self.legado.anexar(sessao_atual.get(), insc.cod_candidato, insc.cod_concurso, tipo,
+                                            nome_arquivo, conteudo, mime, ocr)
         self._endpoint("enviar_documento")
 
-    async def remover_documento(self, cod_pessoa, insc, tipo):
-        if self._usa_legado:
-            self._exigir_convocado(insc)
-            return await self.legado.remover_anexo(sessao_atual.get(), insc.cod_candidato, tipo)
-        self._endpoint("enviar_documento")
-
-    async def enviar_documentos(self, cod_pessoa, insc):
+    async def enviar_documentos(self, cod_pessoa, insc, anexos):
         if self._usa_legado:
             self._exigir_convocado(insc)
             return await self.legado.enviar_documentos(sessao_atual.get(), insc.cod_candidato, insc.cod_concurso,
-                                                       simular=self.s.lyceum_documentos_modo != "enviar")
+                                                       anexos, simular=self.s.lyceum_documentos_modo != "enviar")
         self._endpoint("enviar_documento")
 
     @staticmethod

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type DragEvent } from "react";
 import { api, ApiError } from "../../api/client";
-import type { DocumentoStatus } from "../../api/types";
+import type { DocumentoStatus, OcrResultado } from "../../api/types";
+import { guardarAnexo, listarAnexos, removerAnexo, type AnexoLocal } from "../../lib/anexosLocais";
 import { Alert, Spin, useToast } from "../../components/ui";
 import { norm } from "../../lib/format";
 import { canvasParaJpeg, ehWebp, imagemParaCanvas, miniatura } from "../../lib/imagem";
@@ -77,9 +78,41 @@ export function EtapaDocumentos() {
     api.recursos().then((r) => setModo(r.conferenciaDocumentos)).catch(() => setModo("navegador"));
   }, []);
 
+  /** Documentos do Lyceum + anexos guardados neste navegador (ficam aqui até o envio final). */
+  async function carregar() {
+    const id = insc.codCandidato;
+    const [ds, guardados] = await Promise.all([api.documentos(id), listarAnexos(id)]);
+    const restaurados: Record<string, Local> = {};
+    const lista = ds.map((d) => {
+      const g = guardados.find((x) => x.tipo === d.codigo);
+      if (!g) return d;
+      if (d.status !== "pendente") {
+        void removerAnexo(id, d.codigo); // o Lyceum já tem este documento
+        return d;
+      }
+      const arquivo = new File([g.arquivo], g.nome, { type: g.arquivo.type });
+      restaurados[d.codigo] = {
+        nome: g.nome, arquivo, convertidoDe: g.convertidoDe, fase: "anexado", etapa: "", progresso: 0,
+        analise: paraAnalise(g.analise),
+      };
+      miniatura(arquivo).then((thumb) => thumb && patch(d.codigo, { thumb })).catch(() => {});
+      return anexadoLocal(d, g);
+    });
+    setDocs(lista);
+    setLocal((l) => ({ ...restaurados, ...l }));
+  }
+
   useEffect(() => {
-    api.documentos(insc.codCandidato).then(setDocs).catch((e) => setErro(e instanceof ApiError ? e.message : "Erro ao carregar documentos."));
+    carregar().catch((e) => setErro(e instanceof ApiError ? e.message : "Erro ao carregar documentos."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [insc.codCandidato]);
+
+  /** Guarda no navegador o arquivo conferido + selo do servidor (devolvidos no envio final). */
+  async function guardar(tipo: string, st: DocumentoStatus, arquivo: File, convertidoDe?: string) {
+    if (st.status !== "anexado" || !st.selo) return;
+    await guardarAnexo({ cand: insc.codCandidato, tipo, nome: arquivo.name, arquivo, selo: st.selo,
+                         analise: st.analise ?? null, convertidoDe });
+  }
 
   const patch = (tipo: string, p: Partial<Local>) =>
     setLocal((s) => (s[tipo] ? { ...s, [tipo]: { ...s[tipo], ...p } } : s));
@@ -98,6 +131,7 @@ export function EtapaDocumentos() {
       // O texto bruto do OCR não é enviado: só veredito, confiança, campos e alertas.
       const ocr = a ? { veredito: a.veredito, confianca: a.confianca ?? null, campos: a.campos, alertas: a.alertas } : undefined;
       const st = await api.enviarDocumento(insc.codCandidato, tipo, l.arquivo, ocr);
+      await guardar(tipo, st, l.arquivo, l.convertidoDe);
       setDocs((d) => d?.map((x) => (x.codigo === tipo ? st : x)) ?? d);
       patch(tipo, { fase: "anexado" });
       toast(a && a.veredito !== "ok" ? "Documento anexado. A secretaria vai conferir o ponto indicado." : "Documento conferido e anexado.");
@@ -123,6 +157,7 @@ export function EtapaDocumentos() {
       }
       miniatura(arquivo).then((thumb) => thumb && patch(tipo, { thumb })).catch(() => {});
       const st = await api.enviarDocumento(insc.codCandidato, tipo, arquivo);
+      await guardar(tipo, st, arquivo, arquivo === file ? undefined : "WEBP");
       setDocs((ds) => ds?.map((x) => (x.codigo === tipo ? st : x)) ?? ds);
       const a = st.analise;
       const analise: OcrAnalise | undefined = a
@@ -209,25 +244,35 @@ export function EtapaDocumentos() {
     if (d) processar(d, new File([blob], "cpf-exemplo.png", { type: "image/png" }));
   }
 
+  /** Remove só do navegador: o arquivo ainda não foi ao Lyceum. */
   async function remover(tipo: string) {
-    try {
-      const st = await api.removerDocumento(insc.codCandidato, tipo);
-      setDocs((d) => d?.map((x) => (x.codigo === tipo ? st : x)) ?? d);
-      setLocal((s) => {
-        const { [tipo]: _, ...rest } = s;
-        return rest;
-      });
-    } catch (e) {
-      toast(e instanceof ApiError ? e.message : "Não foi possível remover.");
-    }
+    await removerAnexo(insc.codCandidato, tipo);
+    setDocs((d) => d?.map((x) => (x.codigo === tipo
+      ? { ...x, status: "pendente", arquivo: null, ocrVeredito: null, observacao: null, analise: null, selo: null }
+      : x)) ?? d);
+    setLocal((s) => {
+      const { [tipo]: _, ...rest } = s;
+      return rest;
+    });
   }
 
   async function continuar() {
     setAvancando(true);
     setErroEnvio(null);
     try {
-      const r = await api.enviarDocumentos(insc.codCandidato);
+      const id = insc.codCandidato;
+      const guardados = await listarAnexos(id);
+      const r = await api.enviarDocumentos(id, guardados.map((g) => ({ tipo: g.tipo, nome: g.nome, arquivo: g.arquivo, selo: g.selo })));
+      // o que o Lyceum registrou sai do navegador; o que não foi gravado continua para tentar de novo
+      const registrados = new Set(r.documentos.filter((d) => d.status !== "pendente" && d.status !== "anexado").map((d) => d.codigo));
+      await Promise.all(guardados.filter((g) => registrados.has(g.tipo)).map((g) => removerAnexo(id, g.tipo)));
       toast(r.mensagem);
+      if (!r.simulado && guardados.some((g) => !registrados.has(g.tipo))) {
+        setLocal({});
+        await carregar();
+        setAvancando(false);
+        return;
+      }
       await recarregar();
       ir("pagamento");
     } catch (e) {
@@ -488,4 +533,16 @@ export function EtapaDocumentos() {
       </div>
     </>
   );
+}
+
+/** Resultado guardado da conferência → formato da tela. */
+function paraAnalise(a?: OcrResultado | null): OcrAnalise | undefined {
+  return a ? { veredito: a.veredito, campos: a.campos ?? [], alertas: a.alertas ?? [], texto: "", confianca: a.confianca ?? undefined } : undefined;
+}
+
+/** Linha do documento anexado neste navegador (ainda não enviado ao Lyceum). */
+function anexadoLocal(d: DocumentoStatus, g: AnexoLocal): DocumentoStatus {
+  const v = g.analise?.veredito ?? null;
+  return { ...d, status: "anexado", arquivo: g.nome, ocrVeredito: v, analise: g.analise ?? null, selo: g.selo,
+           observacao: v === "ok" || d.regra === "foto" ? null : "Será conferido pela secretaria." };
 }

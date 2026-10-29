@@ -20,7 +20,7 @@ router = APIRouter(tags=["auth"])
 @router.post("/auth/login", response_model=Pessoa)
 async def login(body: LoginIn, response: Response, gw: LyceumGateway = Depends(gateway),
                 s: Settings = Depends(get_settings)):
-    sid = novo_sid()  # indexa o estado da sessão que fica só no servidor (ex.: sessão legada)
+    sid = novo_sid()  # amarra a sessão do legado (cookie criptografado) a esta sessão do portal
     sessao_atual.set(sid)
     pessoa = await gw.autenticar(body.login.strip(), body.senha)
     set_session(response, SessionUser(cod_pessoa=pessoa.cod_pessoa, login=pessoa.login, nome=pessoa.nome,

@@ -6,10 +6,15 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
 ### Adicionado
 - **Preparação para a Vercel** (homologação interna): `vercel.json` com Services (`front` Vite + `bff`
   FastAPI no mesmo domínio), `.vercelignore` (nunca envia `backend/.env`) e `backend/.python-version`.
-- **Estado compartilhado entre instâncias** (`app/services/estado.py` + middleware `EstadoCompartilhado`).
-  Com `REDIS_URL`, a sessão do legado, os anexos (um campo por documento) e a etapa do wizard vão para o Redis.
-  Sem Redis, tudo continua em memória. Relógios de sessão e cache passaram de `monotonic` para `time.time`,
-  porque o monotônico não vale entre máquinas. Testes simulam várias instâncias e uploads simultâneos.
+- **Backend sem estado entre requisições e sem banco** (a instituição não usa Redis):
+  - a sessão do legado (JSESSIONID) e a etapa do wizard vão num cookie `portal_legado` criptografado e httpOnly;
+  - os anexos ficam no IndexedDB do navegador até o envio final. Sobrevivem a recarregar a página e são apagados
+    ao enviar, ao remover, ao sair e depois de 24 h;
+  - a conferência devolve um **selo** assinado (hash do arquivo + resultado). No envio o navegador devolve arquivo
+    e selo, e arquivo trocado ou selo forjado são recusados;
+  - saiu a rota `DELETE /documentos/{tipo}` (remover é só no navegador). `POST /envio-documentos` passou a receber
+    `arquivo_<código>` + `selo_<código>`;
+  - validado em DEV com duas instâncias atendendo o mesmo candidato. Se a sessão cair, o candidato entra de novo.
 
 ### Corrigido
 - **Documento novo depois do primeiro envio não chegava ao Lyceum** (visto em DEV, 29/10/2026). Depois do primeiro

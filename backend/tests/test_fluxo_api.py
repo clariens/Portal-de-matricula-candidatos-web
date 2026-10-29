@@ -6,9 +6,21 @@ OBRIGATORIOS = ["05", "04", "03", "02"]
 
 
 def _upload(c, tipo, veredito="ok", nome="doc.pdf", data=PDF):
+    """Anexa como o navegador: guarda o arquivo + selo devolvido (no app, no IndexedDB) para o envio final."""
     ocr = json.dumps({"veredito": veredito, "confianca": 88, "campos": [], "alertas": []})
-    return c.post(f"/api/v1/inscricoes/{INSC}/documentos/{tipo}", files={"arquivo": (nome, data, "application/pdf")},
-                  data={"ocr": ocr}, headers=H)
+    r = c.post(f"/api/v1/inscricoes/{INSC}/documentos/{tipo}", files={"arquivo": (nome, data, "application/pdf")},
+               data={"ocr": ocr}, headers=H)
+    if r.status_code == 200 and r.json().get("selo"):
+        c.__dict__.setdefault("guardados", {})[tipo] = (nome, data, r.json()["selo"])
+    return r
+
+
+def _envio(c, trocar=None):
+    """Envio final: o navegador devolve cada arquivo guardado com o seu selo."""
+    guardados = c.__dict__.get("guardados", {})
+    files = [(f"arquivo_{t}", (n, (trocar or {}).get(t, d), "application/pdf")) for t, (n, d, _) in guardados.items()]
+    data = {f"selo_{t}": selo for t, (_, _, selo) in guardados.items()}
+    return c.post(f"/api/v1/inscricoes/{INSC}/envio-documentos", files=files or None, data=data, headers=H)
 
 
 def test_login_invalido(client):
@@ -78,20 +90,35 @@ def test_pagamento_exige_documentos(logged):
 
 def test_envio_exige_obrigatorios(logged):
     _upload(logged, "05")
-    r = logged.post(f"/api/v1/inscricoes/{INSC}/envio-documentos", headers=H)
+    r = _envio(logged)
     assert r.status_code == 409 and "obrigatórios" in r.json()["erro"]["mensagem"]
 
 
-def test_remover_documento(logged):
-    _upload(logged, "05")
-    r = logged.delete(f"/api/v1/inscricoes/{INSC}/documentos/05", headers=H)
-    assert r.status_code == 200 and r.json()["status"] == "pendente"
+def test_envio_recusa_arquivo_trocado_depois_da_conferencia(logged):
+    for t in OBRIGATORIOS:
+        _upload(logged, t)
+    r = _envio(logged, trocar={"05": PDF + b"%outro arquivo"})
+    assert r.status_code == 422 and "não é o que foi conferido" in r.json()["erro"]["mensagem"]
+
+
+def test_envio_recusa_selo_forjado(logged):
+    for t in OBRIGATORIOS:
+        _upload(logged, t)
+    nome, data, _ = logged.guardados["05"]
+    logged.guardados["05"] = (nome, data, "selo-inventado")
+    assert _envio(logged).status_code == 422
+
+
+def test_nada_fica_guardado_no_servidor(logged):
+    assert _upload(logged, "05").json()["status"] == "anexado"
+    st = {d["codigo"]: d["status"] for d in logged.get(f"/api/v1/inscricoes/{INSC}/documentos").json()}
+    assert st["05"] == "pendente"  # quem guarda o anexo é o navegador
 
 
 def test_cartao_indisponivel(logged):
     for t in OBRIGATORIOS:
         _upload(logged, t)
-    logged.post(f"/api/v1/inscricoes/{INSC}/envio-documentos", headers=H)
+    _envio(logged)
     r = logged.post(f"/api/v1/inscricoes/{INSC}/pagamento", json={"tipoResp": "Pessoa", "codigoPlano": "N:PG_CARTÃO_A:Cartao:6"},
                     headers=H)
     assert r.status_code == 422
@@ -118,7 +145,7 @@ def test_fluxo_completo(logged):
     # pagar antes de enviar os documentos é recusado
     assert logged.post(f"/api/v1/inscricoes/{INSC}/pagamento", json={"tipoResp": "Pessoa", "codigoPlano": "N:PG_PIX:PIX:6"},
                        headers=H).status_code == 409
-    env = logged.post(f"/api/v1/inscricoes/{INSC}/envio-documentos", headers=H)
+    env = _envio(logged)
     assert env.status_code == 200 and env.json()["simulado"] is False
     st = {d["codigo"]: d["status"] for d in env.json()["documentos"]}
     assert st["05"] == "enviado" and st["11"] == "enviado" and st["01"] == "pendente"

@@ -16,6 +16,7 @@ from app.core.http import TLS_CONTEXT
 from app.core.session import ler_sessao, require_csrf
 from app.services.ia_documentos import LeitorDocumentos
 from app.services.lyceum import build_gateway
+from app.services.lyceum.legado import COOKIE_LEGADO
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 # httpx loga a URL completa de cada chamada em INFO; as rotas do Lyceum levam CPF/códigos no path.
@@ -27,7 +28,7 @@ FRONT_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 async def lifespan(app: FastAPI):
     s = get_settings()
     if s.portal_session_secret in ("dev-inseguro", "troque-este-segredo"):
-        raise RuntimeError("Defina PORTAL_SESSION_SECRET no backend/.env")
+        raise RuntimeError("Defina a variável PORTAL_SESSION_SECRET (local: backend/.env; Vercel: Settings → Environment Variables)")
     # Os testes automáticos trocam a fábrica por um dublê (backend/tests/fake_lyceum.py); o app só conhece o Lyceum real
     fabrica = getattr(app.state, "gateway_factory", build_gateway)
     async with httpx.AsyncClient(verify=TLS_CONTEXT) as client:
@@ -36,16 +37,16 @@ async def lifespan(app: FastAPI):
         app.state.leitor = LeitorDocumentos(s) if s.ia_documentos_ativa and s.anthropic_api_key else None
         app.state.tentativas_ia = {}
         logging.getLogger("portal").info(
-            "Portal iniciado | Lyceum %s (login: %s) | estado: %s | conferência de documentos: %s",
-            s.lyceum_api_base_url or "-", s.lyceum_auth_modo, "Redis" if s.redis_url else "memória",
+            "Portal iniciado | Lyceum %s (login: %s) | conferência de documentos: %s",
+            s.lyceum_api_base_url or "-", s.lyceum_auth_modo,
             f"IA ({s.ia_documentos_modelo}, teto US${s.ia_documentos_limite_diario_usd:.2f}/dia)" if app.state.leitor
             else "navegador (OCR local)")
         yield
 
 
-class EstadoCompartilhado:
-    """Com Redis (Vercel), carrega a sessão do legado do candidato no início da requisição e salva antes da
-    resposta sair: a próxima requisição pode cair em outra instância e precisa encontrar tudo lá."""
+class SessaoLegadoNoCookie:
+    """Carrega a sessão do legado do cookie criptografado no início da requisição e grava a versão nova na
+    resposta (Set-Cookie). Nenhuma instância guarda estado: a próxima requisição pode cair em qualquer uma."""
 
     def __init__(self, app):
         self.app = app
@@ -53,27 +54,30 @@ class EstadoCompartilhado:
     async def __call__(self, scope, receive, send):
         gw = getattr(scope["app"].state, "gateway", None) if scope["type"] == "http" else None
         sessoes = getattr(getattr(gw, "legado", None), "sessoes", None)
-        if not sessoes or not sessoes.kv or not scope["path"].startswith("/api/"):
+        if not sessoes or not sessoes.no_cookie or not scope["path"].startswith("/api/"):
             await self.app(scope, receive, send)
             return
         req = sessoes.iniciar()
-        user = ler_sessao(Request(scope), get_settings())
+        request = Request(scope)
+        user = ler_sessao(request, get_settings())
         if user and user.sid:
-            await sessoes.carregar(req, user.sid)
-        salvo = False
+            sessoes.carregar(req, user.sid, request.cookies.get(COOKIE_LEGADO))
+        concluido = False
 
         async def enviar(msg):
-            nonlocal salvo
-            if msg["type"] == "http.response.start" and not salvo:
-                salvo = True
-                await sessoes.concluir(req)
+            nonlocal concluido
+            if msg["type"] == "http.response.start" and not concluido:
+                concluido = True
+                cabecalhos = list(msg.get("headers", []))
+                cabecalhos += [(b"set-cookie", c.encode("latin-1")) for c in sessoes.concluir(req)]
+                msg = {**msg, "headers": cabecalhos}
             await send(msg)
 
         try:
             await self.app(scope, receive, enviar)
         finally:
-            if not salvo:
-                await sessoes.concluir(req)
+            if not concluido:
+                sessoes.concluir(req)
 
 
 app = FastAPI(
@@ -93,7 +97,7 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-Requested-With"],
 )
 
-app.add_middleware(EstadoCompartilhado)
+app.add_middleware(SessaoLegadoNoCookie)
 
 api_deps = [Depends(require_csrf)]
 for r in (auth.router, enderecos.router, inscricoes.router):

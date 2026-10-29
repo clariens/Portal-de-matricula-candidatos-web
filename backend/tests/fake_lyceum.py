@@ -12,7 +12,7 @@ from app.core.errors import PortalError
 from app.core.validators import digits, mask_cep
 from app.schemas.auth import Pessoa
 from app.schemas.candidato import Candidato, CandidatoUpdate, CepResultado, Endereco, Municipio, Uf
-from app.schemas.documento import DocumentoStatus, EnvioDocumentosResultado, OcrResultado
+from app.schemas.documento import Anexo, DocumentoStatus, EnvioDocumentosResultado, OcrResultado
 from app.schemas.inscricao import Inscricao
 from app.schemas.matricula import ConfirmacaoResultado, Contrato, Disciplina, Matricula, Questionario
 from app.schemas.pagamento import (
@@ -183,37 +183,32 @@ class FakeLyceum:
             out.append(enviados.get(t.codigo) or DocumentoStatus(**t.model_dump()))
         return [d.model_copy(deep=True) for d in out]
 
-    async def enviar_documento(self, cod_pessoa, insc, tipo, nome_arquivo, conteudo, mime, ocr: OcrResultado | None):
+    async def anexar_documento(self, cod_pessoa, insc, tipo, nome_arquivo, conteudo, mime, ocr: OcrResultado | None):
+        """Como o legado: valida e prepara, sem guardar (o arquivo fica no navegador até o envio)."""
         self._exigir_convocado(insc)
         t = next((x for x in TIPOS_DOCUMENTO if x.codigo == tipo), None)
         if not t:
             raise PortalError(404, "Tipo de documento não encontrado neste processo.")
+        if tipo in self.documentos.get(insc.cod_candidato, {}):
+            raise PortalError(409, "Este documento já foi enviado ao Lyceum. A secretaria vai conferir.")
         manual = ocr is None or ocr.veredito != "ok"
         st = DocumentoStatus(
-            **t.model_dump(), status="anexado", arquivo=nome_arquivo,
-            enviado_em=datetime.now().strftime("%d/%m/%Y %H:%M"), ocr_veredito=ocr.veredito if ocr else None,
+            **t.model_dump(), status="anexado", arquivo=nome_arquivo, ocr_veredito=ocr.veredito if ocr else None,
             observacao="Será conferido pela secretaria." if manual else None,
         )
-        self.documentos.setdefault(insc.cod_candidato, {})[tipo] = st
-        return st.model_copy(deep=True)
+        anexo = Anexo(nome=nome_arquivo, conteudo=conteudo, mime=mime, ocr=ocr, em=datetime.now().strftime("%d/%m/%Y %H:%M"))
+        return st, anexo
 
-    async def remover_documento(self, cod_pessoa, insc, tipo) -> DocumentoStatus:
+    async def enviar_documentos(self, cod_pessoa, insc, anexos: dict[str, Anexo]) -> EnvioDocumentosResultado:
         self._exigir_convocado(insc)
-        t = next((x for x in TIPOS_DOCUMENTO if x.codigo == tipo), None)
-        if not t:
-            raise PortalError(404, "Tipo de documento não encontrado neste processo.")
-        self.documentos.get(insc.cod_candidato, {}).pop(tipo, None)
-        return DocumentoStatus(**t.model_dump())
-
-    async def enviar_documentos(self, cod_pessoa, insc) -> EnvioDocumentosResultado:
-        self._exigir_convocado(insc)
-        docs = self.documentos.get(insc.cod_candidato, {})
-        faltando = [t.nome for t in TIPOS_DOCUMENTO if t.obrigatorio and t.codigo not in docs]
+        enviados = self.documentos.setdefault(insc.cod_candidato, {})
+        faltando = [t.nome for t in TIPOS_DOCUMENTO if t.obrigatorio and t.codigo not in anexos and t.codigo not in enviados]
         if faltando:
             raise PortalError(409, "Anexe os documentos obrigatórios: " + ", ".join(faltando) + ".")
-        for d in docs.values():
-            if d.status == "anexado":  # para o candidato, só "enviado" (aceite é da secretaria)
-                d.status, d.observacao = "enviado", None
+        for t in TIPOS_DOCUMENTO:
+            if t.codigo in anexos:  # para o candidato, só "enviado" (aceite é da secretaria)
+                enviados[t.codigo] = DocumentoStatus(**t.model_dump(), status="enviado", arquivo=anexos[t.codigo].nome,
+                                                     enviado_em=anexos[t.codigo].em)
         self._avancar(insc.cod_candidato, "pagamento")
         return EnvioDocumentosResultado(simulado=False, mensagem="Documentos enviados.",
                                         documentos=await self.listar_documentos(cod_pessoa, insc))
@@ -245,7 +240,7 @@ class FakeLyceum:
         self._exigir_convocado(insc)
         docs = self.documentos.get(insc.cod_candidato, {})
         faltando = [t.nome for t in TIPOS_DOCUMENTO if t.obrigatorio and docs.get(t.codigo, None) is None]
-        if faltando or any(d.status == "anexado" for d in docs.values()):
+        if faltando:
             raise PortalError(409, "Envie os documentos obrigatórios antes do pagamento.")
         cupom = (dados.voucher or self.cupom.get(insc.cod_candidato) or "").upper()
         if dados.voucher and cupom not in CUPONS:

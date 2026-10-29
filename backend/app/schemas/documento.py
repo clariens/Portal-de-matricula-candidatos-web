@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import Literal
 
 from pydantic import Field
@@ -46,6 +47,20 @@ class DocumentoStatus(TipoDocumento):
     observacao: str | None = None
     # resultado da conferência deste envio (presente na resposta do anexo)
     analise: OcrResultado | None = None
+    # selo assinado pelo servidor (resposta do anexo): o navegador guarda o arquivo + selo e devolve os dois no
+    # envio final; o selo prova que aquele arquivo, exatamente, passou pela conferência (ver app/core/selo.py)
+    selo: str | None = None
+
+
+@dataclass
+class Anexo:
+    """Documento pronto para ir ao Lyceum (montado no envio final a partir do que o navegador guardou)."""
+
+    nome: str
+    conteudo: bytes
+    mime: str
+    ocr: OcrResultado | None
+    em: str
 
 
 class EnvioDocumentosResultado(ApiModel):

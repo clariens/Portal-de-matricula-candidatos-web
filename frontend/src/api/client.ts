@@ -109,9 +109,16 @@ export const api = {
     if (ocr) fd.append("ocr", JSON.stringify(ocr));
     return request<DocumentoStatus>("POST", `${ins(id)}/documentos/${tipo}`, fd);
   },
-  removerDocumento: (id: string, tipo: string) => request<DocumentoStatus>("DELETE", `${ins(id)}/documentos/${tipo}`),
-  /** Envia ao Lyceum, de uma vez, os documentos anexados (no legado isso finaliza a inscrição). */
-  enviarDocumentos: (id: string) => request<EnvioDocumentosResultado>("POST", `${ins(id)}/envio-documentos`),
+  /** Envia ao Lyceum, de uma vez, os documentos guardados no navegador, cada um com o selo da conferência
+   *  (no legado o primeiro envio finaliza a inscrição). */
+  enviarDocumentos: (id: string, itens: { tipo: string; nome: string; arquivo: Blob; selo: string }[]) => {
+    const fd = new FormData();
+    for (const i of itens) {
+      fd.append(`arquivo_${i.tipo}`, i.arquivo, i.nome);
+      fd.append(`selo_${i.tipo}`, i.selo);
+    }
+    return request<EnvioDocumentosResultado>("POST", `${ins(id)}/envio-documentos`, fd);
+  },
 
   opcoesPagamento: (id: string) => request<OpcoesPagamento>("GET", `${ins(id)}/pagamento/opcoes`),
   validarCupom: (id: string, codigo: string) => request<CupomResultado>("POST", `${ins(id)}/cupons/validar`, { codigo }),

@@ -11,6 +11,7 @@ export type Endereco = S["Endereco"];
 export type Uf = S["Uf"];
 export type CepResultado = S["CepResultado"];
 export type DocumentoStatus = S["DocumentoStatus"];
+export type OcrResultado = S["OcrResultado"];
 export type EnvioDocumentosResultado = S["EnvioDocumentosResultado"];
 export type OpcoesPagamento = S["OpcoesPagamento"];
 export type Plano = S["Plano"];

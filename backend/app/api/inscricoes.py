@@ -1,12 +1,15 @@
 import json
 import os
+import re
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from pydantic import ValidationError
+from starlette.datastructures import UploadFile as StarletteUpload
 
 from app.api.deps import gateway, inscricao_autorizada
 from app.config import Settings, get_settings
 from app.core.errors import PortalError
+from app.core.selo import emitir_selo, verificar_selo
 from app.core.session import SessionUser, current_user
 from app.schemas.candidato import Candidato, CandidatoUpdate
 from app.schemas.documento import (
@@ -29,6 +32,7 @@ MSG_IA_INDISPONIVEL = ("Não foi possível conferir este documento automaticamen
 Insc = Depends(inscricao_autorizada)
 User = Depends(current_user)
 Gw = Depends(gateway)
+TIPO_RE = re.compile(r"\w{1,10}")
 
 
 # ---------- histórico ----------
@@ -61,7 +65,7 @@ async def listar_documentos(insc: Inscricao = Insc, user: SessionUser = User, gw
 
 
 @router.post("/inscricoes/{cod_candidato}/documentos/{tipo}", response_model=DocumentoStatus)
-async def enviar_documento(
+async def anexar_documento(
     request: Request,
     tipo: str,
     arquivo: UploadFile = File(...),
@@ -71,42 +75,54 @@ async def enviar_documento(
     gw: LyceumGateway = Gw,
     s: Settings = Depends(get_settings),
 ):
-    nome = os.path.basename(arquivo.filename or "documento")
-    ext = os.path.splitext(nome)[1].lower()
-    mime = EXTENSOES_ACEITAS.get(ext)
+    """Confere o documento e devolve o resultado com um selo assinado. Nada fica guardado no servidor: o
+    navegador guarda o arquivo + selo e os devolve em POST /envio-documentos."""
+    conteudo = await arquivo.read(s.portal_upload_max_mb * 1024 * 1024 + 1)
+    nome, mime = _validar_arquivo(arquivo.filename, conteudo, s)
+    leitor: LeitorDocumentos | None = getattr(request.app.state, "leitor", None)
+    if leitor:
+        # Conferência com IA no servidor: o resultado do navegador é ignorado (o servidor é a fonte da verdade)
+        resultado = await _conferir_com_ia(leitor, s, request, insc, user, gw, tipo, conteudo, mime)
+        if resultado.status != "anexado":
+            return resultado  # documento errado: não recebe selo; o candidato envia outro arquivo
+        analise = resultado.analise
+    else:
+        analise = None
+        if ocr:
+            try:
+                analise = OcrResultado.model_validate(json.loads(ocr))
+            except (ValueError, ValidationError):
+                analise = None  # resultado ilegível do navegador: o documento vai para conferência manual
+        if analise and analise.veredito in VEREDITOS_BLOQUEADOS:
+            motivo = analise.alertas[0] if analise.alertas else "Documento não reconhecido."
+            raise PortalError(422, motivo, {"arquivo": "Envie outro arquivo."})
+    st, _ = await gw.anexar_documento(user.cod_pessoa, insc, tipo, nome, conteudo, mime, analise)
+    st.analise = analise
+    st.selo = emitir_selo(s, insc.cod_candidato, tipo, nome, conteudo, analise)
+    return st
+
+
+def _validar_arquivo(nome_bruto: str | None, conteudo: bytes, s: Settings) -> tuple[str, str]:
+    nome = os.path.basename(nome_bruto or "documento")
+    mime = EXTENSOES_ACEITAS.get(os.path.splitext(nome)[1].lower())
     if not mime:
         raise PortalError(422, "Formato não aceito. Envie JPG, PNG ou PDF.", {"arquivo": "Formato não aceito."})
-    limite = s.portal_upload_max_mb * 1024 * 1024
-    conteudo = await arquivo.read(limite + 1)
-    if len(conteudo) > limite:
+    if len(conteudo) > s.portal_upload_max_mb * 1024 * 1024:
         raise PortalError(413, f"Arquivo acima de {s.portal_upload_max_mb} MB.", {"arquivo": "Arquivo grande demais."})
     if not conteudo:
         raise PortalError(422, "Arquivo vazio.", {"arquivo": "Arquivo vazio."})
     if not any(conteudo.startswith(m) for m in MAGIC[mime]):
         raise PortalError(422, "O conteúdo do arquivo não corresponde à extensão.", {"arquivo": "Arquivo inválido."})
-    leitor: LeitorDocumentos | None = getattr(request.app.state, "leitor", None)
-    if leitor:
-        # Conferência com IA no servidor: o resultado do navegador é ignorado (o servidor é a fonte da verdade)
-        return await _conferir_com_ia(leitor, s, request, insc, user, gw, tipo, nome, conteudo, mime)
-
-    ocr_res = None
-    if ocr:
-        try:
-            ocr_res = OcrResultado.model_validate(json.loads(ocr))
-        except (ValueError, ValidationError):
-            ocr_res = None  # resultado ilegível do navegador: o documento vai para conferência manual
-    if ocr_res and ocr_res.veredito in VEREDITOS_BLOQUEADOS:
-        motivo = ocr_res.alertas[0] if ocr_res.alertas else "Documento não reconhecido."
-        raise PortalError(422, motivo, {"arquivo": "Envie outro arquivo."})
-    return await gw.enviar_documento(user.cod_pessoa, insc, tipo, nome, conteudo, mime, ocr_res)
+    return nome, mime
 
 
 async def _conferir_com_ia(leitor, s: Settings, request: Request, insc: Inscricao, user: SessionUser,
-                           gw: LyceumGateway, tipo: str, nome: str, conteudo: bytes, mime: str) -> DocumentoStatus:
+                           gw: LyceumGateway, tipo: str, conteudo: bytes, mime: str) -> DocumentoStatus:
+    """Lê com IA e decide. Devolve o status "anexado" com a análise, ou o status atual se for documento errado."""
     esperado = next((d for d in await gw.listar_documentos(user.cod_pessoa, insc) if d.codigo == tipo), None)
     if not esperado:
         raise PortalError(404, "Documento não solicitado neste processo.")
-    # limite de análises por documento na sessão: evita gasto descontrolado com trocas repetidas
+    # limite de análises por documento (por instância): evita gasto descontrolado com trocas repetidas
     tentativas = request.app.state.tentativas_ia
     chave = (user.sid, insc.cod_candidato, tipo)
     tentativas[chave] = tentativas.get(chave, 0) + 1
@@ -120,23 +136,33 @@ async def _conferir_com_ia(leitor, s: Settings, request: Request, insc: Inscrica
             resultado = conferir(lido.leitura, esperado, cand)
         except IAIndisponivel:
             resultado = OcrResultado(veredito="erro", fonte="ia", alertas=[MSG_IA_INDISPONIVEL])
-    if resultado.veredito in VEREDITOS_BLOQUEADOS:
-        # documento errado: não é anexado; o candidato precisa enviar outro arquivo
-        return DocumentoStatus(**esperado.model_dump(exclude={"analise"}) | {"status": esperado.status}, analise=resultado)
-    st = await gw.enviar_documento(user.cod_pessoa, insc, tipo, nome, conteudo, mime, resultado)
-    st.analise = resultado
-    return st
+    status = esperado.status if resultado.veredito in VEREDITOS_BLOQUEADOS else "anexado"
+    return DocumentoStatus(**esperado.model_dump(exclude={"analise", "status"}), status=status, analise=resultado)
 
 
-@router.delete("/inscricoes/{cod_candidato}/documentos/{tipo}", response_model=DocumentoStatus)
-async def remover_documento(tipo: str, insc: Inscricao = Insc, user: SessionUser = User, gw: LyceumGateway = Gw):
-    return await gw.remover_documento(user.cod_pessoa, insc, tipo)
-
-
-@router.post("/inscricoes/{cod_candidato}/envio-documentos", response_model=EnvioDocumentosResultado)
-async def enviar_documentos(insc: Inscricao = Insc, user: SessionUser = User, gw: LyceumGateway = Gw):
-    """Envia ao Lyceum, de uma vez, os documentos anexados. No legado isso FINALIZA a inscrição."""
-    return await gw.enviar_documentos(user.cod_pessoa, insc)
+@router.post("/inscricoes/{cod_candidato}/envio-documentos", response_model=EnvioDocumentosResultado,
+             openapi_extra={"requestBody": {"content": {"multipart/form-data": {"schema": {
+                 "type": "object", "description": "Para cada documento: arquivo_<código> (arquivo) e "
+                                                  "selo_<código> (o selo devolvido no anexo)."}}}}})
+async def enviar_documentos(request: Request, insc: Inscricao = Insc, user: SessionUser = User,
+                            gw: LyceumGateway = Gw, s: Settings = Depends(get_settings)):
+    """Envia ao Lyceum, de uma vez, os documentos que o navegador guardou (arquivo + selo de cada um).
+    No legado o primeiro envio FINALIZA a inscrição."""
+    form = await request.form(max_files=40)
+    anexos = {}
+    for chave, valor in form.multi_items():
+        tipo = chave.removeprefix("arquivo_")
+        if tipo == chave or not isinstance(valor, StarletteUpload) or not TIPO_RE.fullmatch(tipo):
+            continue
+        conteudo = await valor.read(s.portal_upload_max_mb * 1024 * 1024 + 1)
+        nome, analise = verificar_selo(s, str(form.get(f"selo_{tipo}") or ""), insc.cod_candidato, tipo, conteudo)
+        nome, mime = _validar_arquivo(nome, conteudo, s)
+        try:
+            _, anexos[tipo] = await gw.anexar_documento(user.cod_pessoa, insc, tipo, nome, conteudo, mime, analise)
+        except PortalError as e:
+            if e.status != 409:  # 409 = o Lyceum já tem este documento: nunca reenviar
+                raise
+    return await gw.enviar_documentos(user.cod_pessoa, insc, anexos)
 
 
 # ---------- etapa: pagamento ----------

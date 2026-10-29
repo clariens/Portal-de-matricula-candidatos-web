@@ -1,7 +1,6 @@
 import httpx
 
 from app.config import Settings
-from app.services.estado import criar_kv
 from app.services.lyceum.base import LyceumGateway
 from app.services.lyceum.legado import SessoesLegado
 from app.services.lyceum.techne import TechneGateway
@@ -17,8 +16,10 @@ def build_gateway(settings: Settings, client: httpx.AsyncClient) -> LyceumGatewa
     ) if not valor]
     if faltando:
         # Falha ao iniciar, com o nome do que falta (ex.: servidor iniciado fora da pasta backend, sem ler o .env)
-        raise RuntimeError(f"Configure no backend/.env: {', '.join(faltando)}")
-    return TechneGateway(settings, client, SessoesLegado(criar_kv(settings.redis_url)))
+        raise RuntimeError(f"Defina as variáveis {', '.join(faltando)} (local: backend/.env; Vercel: Settings → Environment Variables)")
+    # sessão do legado em cookie criptografado no navegador: nenhuma instância guarda estado (Vercel)
+    sessoes = SessoesLegado(settings.portal_session_secret, settings.portal_cookie_secure)
+    return TechneGateway(settings, client, sessoes)
 
 
 __all__ = ["LyceumGateway", "TechneGateway", "build_gateway"]

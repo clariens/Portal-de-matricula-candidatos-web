@@ -4,10 +4,11 @@ Por quê: a API REST só autentica ALUNO por RA, e o usuário técnico não tem 
 /processoseletivo/* (grupo v1 → 403). O legado autentica o candidato por CPF/e-mail e só mostra as
 inscrições DELE, o que dispensa a checagem de dono que o Basic de serviço exige.
 
-Como: o login (j_security_check) abre uma sessão Java (cookie JSESSIONID). Os cookies ficam SOMENTE no
-servidor, em `SessoesLegado`, indexados pelo `sid` aleatório da sessão do portal. O navegador nunca
-recebe o JSESSIONID. Se o legado derrubar a sessão (timeout ~30 min), a chamada responde 401 e o
-candidato entra de novo (a senha nunca é guardada).
+Como: o login (j_security_check) abre uma sessão Java (cookie JSESSIONID). Entre requisições os cookies do
+Tomcat viajam num cookie do portal CRIPTOGRAFADO e httpOnly (`portal_legado`, ver `SessoesLegado`), amarrado ao
+`sid` da sessão do portal: o navegador não lê o JSESSIONID e o servidor não guarda nada (funciona com várias
+instâncias, ex.: Vercel). Se o legado derrubar a sessão (timeout ~30 min) ou o cookie vencer, a chamada
+responde 401 e o candidato entra de novo (a senha nunca é guardada).
 
 Contrato observado em DEV (20/10/2026):
   GET  /r/historico        sem sessão → 401 + JSESSIONID (cria o "saved request"; sem ele o login dá 408)
@@ -35,10 +36,10 @@ Contrato observado em DEV (20/10/2026):
                            <td class="col-data-documento|aceito|motivo-recusa|data-entrega">, código no
                            openModalWindown('id','código',…); Aceito: title Pendente | Sim | Não.
 
-Produção com mais de uma instância do BFF: trocar o dicionário em memória por Redis.
 """
 
 import base64
+import hashlib
 import html
 import json
 import logging
@@ -50,13 +51,20 @@ from contextvars import ContextVar
 from dataclasses import dataclass, field
 
 import httpx
+from cryptography.fernet import Fernet, InvalidToken
 from PIL import Image
 
 from app.core.errors import GENERIC_LOGIN, LyceumIndisponivel, PortalError
 from app.core.http import TLS_CONTEXT
 from app.core.validators import digits, mask_cep, mask_cnpj, mask_cpf, normalizar_data_br
 from app.schemas.candidato import Candidato, CandidatoUpdate, Endereco, Municipio
-from app.schemas.documento import DocumentoStatus, EnvioDocumentosResultado, OcrResultado, TipoDocumento
+from app.schemas.documento import (
+    Anexo,
+    DocumentoStatus,
+    EnvioDocumentosResultado,
+    OcrResultado,
+    TipoDocumento,
+)
 from app.schemas.inscricao import Inscricao
 from app.schemas.pagamento import (
     Cobranca,
@@ -66,7 +74,6 @@ from app.schemas.pagamento import (
     PagamentoResultado,
     Plano,
 )
-from app.services.estado import KV
 from app.services.imagens import preparar_imagem
 from app.services.lyceum.catalogo import REGRA_POR_TIPO, TIPOS_DOCUMENTO
 from app.services.lyceum.mappers import normalizar_situacao
@@ -75,7 +82,6 @@ log = logging.getLogger("lyceum")
 
 SESSAO_TTL = 25 * 60  # abaixo dos 30 min padrão do Tomcat
 CACHE_HISTORICO = 30  # s; o histórico é consultado em toda rota de inscrição (checagem de dono)
-LIMITE_ANEXOS = 40 * 1024 * 1024  # memória por inscrição até o envio final
 CACHE_TIPOS_DOCUMENTO = 300  # s
 UPLOAD_TIMEOUT = 120.0
 FOTO_MAX_PX, FOTO_QUALIDADE = 2000, 85  # foto enviada ao Lyceum: legível para a secretaria, ~300-600 KB
@@ -98,22 +104,11 @@ class _Sessao:
     historico: tuple[float, list[Inscricao]] | None = field(default=None)
     # Progresso do wizard por inscrição: o legado não expõe em que etapa o candidato está.
     etapas: dict[str, str] = field(default_factory=dict)
-    # Arquivos anexados e ainda não enviados ao Lyceum: {cod_candidato: {código_doc: Anexo}}
-    anexos: dict[str, dict[str, "Anexo"]] = field(default_factory=dict)
     tipos_documento: tuple[float, list[TipoDocumento]] | None = None
 
 
-@dataclass
-class Anexo:
-    nome: str
-    conteudo: bytes
-    mime: str
-    ocr: OcrResultado | None
-    em: str
-
-
 class _Requisicao:
-    """O que uma requisição tocou nas sessões (para salvar no fim) e o que ela carregou (para liberar)."""
+    """O que uma requisição tocou nas sessões (para gravar o cookie) e o que ela carregou (para liberar)."""
 
     def __init__(self) -> None:
         self.tocados: set[str] = set()
@@ -121,20 +116,29 @@ class _Requisicao:
 
 
 _requisicao: ContextVar[_Requisicao | None] = ContextVar("requisicao_legado", default=None)
+COOKIE_LEGADO = "portal_legado"
 
 
 class SessoesLegado:
-    """Sessões do legado por `sid`. Sem `kv`, só em memória (um processo). Com `kv` (Redis na Vercel), cada
-    requisição carrega a sessão no início e salva antes de responder (`iniciar`/`carregar`/`concluir`, chamados
-    pelo middleware em app/main.py); os anexos ficam num hash à parte, um campo por documento, para que
-    uploads simultâneos de documentos diferentes não se sobrescrevam."""
+    """Sessões do legado por `sid`.
 
-    def __init__(self, kv: KV | None = None) -> None:
-        self.kv = kv
+    Sem `segredo`: só em memória (testes de unidade). Com `segredo` (o app sempre passa): a sessão vive no
+    navegador, num cookie httpOnly criptografado (Fernet, chave derivada do PORTAL_SESSION_SECRET) com os cookies
+    do Tomcat e a etapa do wizard. Nenhuma instância guarda estado (Vercel) e não há banco: o middleware em
+    app/main.py carrega o cookie no início da requisição e grava a versão nova na resposta. Cookie ausente,
+    adulterado ou vencido = sessão expirada, e o candidato entra de novo.
+    """
+
+    def __init__(self, segredo: str | None = None, cookie_seguro: bool = False) -> None:
+        self._fernet = Fernet(_chave_fernet(segredo)) if segredo else None
+        self.cookie_seguro = cookie_seguro
         self._s: dict[str, _Sessao] = {}
         self._em_uso: dict[str, int] = {}  # requisições em andamento por sid nesta instância
-        self._snap: dict[str, dict[str, Anexo]] = {}  # anexos como estavam no Redis ao carregar
         self._removidos: set[str] = set()
+
+    @property
+    def no_cookie(self) -> bool:
+        return self._fernet is not None
 
     def _tocar(self, sid: str | None) -> None:
         req = _requisicao.get()
@@ -157,7 +161,7 @@ class SessoesLegado:
         return s
 
     def remover(self, sid: str | None) -> _Sessao | None:
-        if sid and self.kv:
+        if sid and self.no_cookie:
             self._removidos.add(sid)
             self._tocar(sid)
         return self._s.pop(sid or "", None)
@@ -167,103 +171,65 @@ class SessoesLegado:
         for k in [k for k, v in self._s.items() if v.expira < agora]:
             self._s.pop(k, None)
 
-    # ---------- persistência entre instâncias (só com kv) ----------
+    # ---------- sessão no cookie (chamado pelo middleware) ----------
     def iniciar(self) -> _Requisicao:
         req = _Requisicao()
         _requisicao.set(req)
         return req
 
-    async def carregar(self, req: _Requisicao, sid: str) -> None:
-        if not self.kv:
+    def carregar(self, req: _Requisicao, sid: str, valor_cookie: str | None) -> None:
+        if not self.no_cookie:
             return
         req.carregados.append(sid)
         self._em_uso[sid] = self._em_uso.get(sid, 0) + 1
         if self._em_uso[sid] > 1 and sid in self._s:
             return  # outra requisição desta instância já carregou e está usando
-        bruto = await self.kv.get(_chave(sid))
-        if not bruto:
-            self._s.pop(sid, None)
-            return
-        s = _sessao_de_json(json.loads(bruto))
-        anexos = {campo: _anexo_de_json(json.loads(v)) for campo, v in (await self.kv.hgetall(_chave_anexos(sid))).items()}
-        for campo, a in anexos.items():
-            cand, tipo = campo.split("|", 1)
-            s.anexos.setdefault(cand, {})[tipo] = a
-        self._s[sid] = s
-        self._snap[sid] = anexos
-
-    async def concluir(self, req: _Requisicao) -> None:
-        if not self.kv:
+        self._s.pop(sid, None)
+        if not valor_cookie:
             return
         try:
+            d = json.loads(self._fernet.decrypt(valor_cookie.encode(), ttl=SESSAO_TTL))
+        except (InvalidToken, ValueError):
+            return
+        if d.get("s") != sid:  # cookie de outra sessão do portal: ignora
+            return
+        cookies = httpx.Cookies()
+        for nome, valor, dominio, caminho in d.get("c", []):
+            cookies.set(nome, valor, domain=dominio, path=caminho)
+        self._s[sid] = _Sessao(cookies=cookies, expira=float(d.get("x", 0)), etapas=d.get("e") or {})
+
+    def concluir(self, req: _Requisicao) -> list[str]:
+        """Cabeçalhos Set-Cookie com a sessão atualizada (ou apagada) das sessões que a requisição tocou."""
+        if not self.no_cookie:
+            return []
+        cabecalhos = []
+        try:
             for sid in req.tocados:
-                await self._salvar(sid)
+                s = self._s.get(sid)
+                if sid in self._removidos or not s:
+                    cabecalhos.append(self._set_cookie("", 0))
+                    continue
+                corpo = {"s": sid, "x": s.expira, "e": s.etapas,
+                         "c": [[c.name, c.value, c.domain, c.path] for c in s.cookies.jar]}
+                cabecalhos.append(self._set_cookie(self._fernet.encrypt(json.dumps(corpo).encode()).decode(),
+                                                   SESSAO_TTL))
         finally:
             for sid in req.carregados:
                 self._em_uso[sid] = self._em_uso.get(sid, 1) - 1
             for sid in set(req.carregados) | req.tocados:
-                if self._em_uso.get(sid, 0) <= 0:  # ninguém mais usando: a próxima requisição relê do Redis
+                if self._em_uso.get(sid, 0) <= 0:  # ninguém mais usando: nada fica na memória da instância
                     self._em_uso.pop(sid, None)
                     self._s.pop(sid, None)
-                    self._snap.pop(sid, None)
                     self._removidos.discard(sid)
+        return cabecalhos
 
-    async def _salvar(self, sid: str) -> None:
-        s = self._s.get(sid)
-        if sid in self._removidos or not s:
-            await self.kv.delete(_chave(sid), _chave_anexos(sid))
-            return
-        await self.kv.set(_chave(sid), json.dumps(_sessao_para_json(s)).encode(), SESSAO_TTL)
-        atuais = {f"{cand}|{tipo}": a for cand, docs in s.anexos.items() for tipo, a in docs.items()}
-        antes = self._snap.get(sid, {})
-        for campo, a in atuais.items():
-            if antes.get(campo) is not a:
-                await self.kv.hset(_chave_anexos(sid), campo, json.dumps(_anexo_para_json(a)).encode(), SESSAO_TTL)
-        sumiram = [c for c in antes if c not in atuais]
-        if sumiram:
-            await self.kv.hdel(_chave_anexos(sid), *sumiram)
-        self._snap[sid] = atuais
+    def _set_cookie(self, valor: str, max_age: int) -> str:
+        return (f"{COOKIE_LEGADO}={valor}; Path=/api; Max-Age={max_age}; HttpOnly; SameSite=Lax"
+                + ("; Secure" if self.cookie_seguro else ""))
 
 
-def _chave(sid: str) -> str:
-    return f"portal:legado:{sid}"
-
-
-def _chave_anexos(sid: str) -> str:
-    return f"portal:anexos:{sid}"
-
-
-def _sessao_para_json(s: _Sessao) -> dict:
-    return {
-        "cookies": [[c.name, c.value, c.domain, c.path] for c in s.cookies.jar],
-        "expira": s.expira,
-        "historico": [s.historico[0], [i.model_dump(mode="json") for i in s.historico[1]]] if s.historico else None,
-        "etapas": s.etapas,
-        "tipos": ([s.tipos_documento[0], [t.model_dump(mode="json") for t in s.tipos_documento[1]]]
-                  if s.tipos_documento else None),
-    }
-
-
-def _sessao_de_json(d: dict) -> _Sessao:
-    cookies = httpx.Cookies()
-    for nome, valor, dominio, caminho in d["cookies"]:
-        cookies.set(nome, valor, domain=dominio, path=caminho)
-    h, t = d.get("historico"), d.get("tipos")
-    return _Sessao(
-        cookies=cookies, expira=d["expira"], etapas=d.get("etapas") or {},
-        historico=(h[0], [Inscricao.model_validate(i) for i in h[1]]) if h else None,
-        tipos_documento=(t[0], [TipoDocumento.model_validate(x) for x in t[1]]) if t else None,
-    )
-
-
-def _anexo_para_json(a: Anexo) -> dict:
-    return {"nome": a.nome, "mime": a.mime, "em": a.em, "conteudo": base64.b64encode(a.conteudo).decode(),
-            "ocr": a.ocr.model_dump(mode="json") if a.ocr else None}
-
-
-def _anexo_de_json(d: dict) -> Anexo:
-    return Anexo(nome=d["nome"], mime=d["mime"], em=d["em"], conteudo=base64.b64decode(d["conteudo"]),
-                 ocr=OcrResultado.model_validate(d["ocr"]) if d.get("ocr") else None)
+def _chave_fernet(segredo: str) -> bytes:
+    return base64.urlsafe_b64encode(hashlib.sha256(b"portal-legado:" + segredo.encode()).digest())
 
 
 class ClienteLegado:
@@ -531,9 +497,6 @@ class ClienteLegado:
         s.tipos_documento = (time.time(), tipos)
         return [t.model_copy(deep=True) for t in tipos]
 
-    def _anexos(self, sid: str | None, cod_candidato: str) -> dict[str, Anexo]:
-        return self.sessoes.obter(sid).anexos.setdefault(cod_candidato, {})
-
     async def documentos_entregues(self, sid: str | None, cod_candidato: str,
                                    cod_concurso: str) -> dict[str, "Entregue"]:
         """Documentos que o Lyceum já registrou para a inscrição (tela "Documentos Ingresso" do legado)."""
@@ -549,15 +512,17 @@ class ClienteLegado:
             if not entregues:
                 raise
             tipos = [t.model_copy(deep=True) for t in TIPOS_DOCUMENTO]  # página fechada: usa o catálogo
-        anexos = self._anexos(sid, cod_candidato)
-        lista = [_status_entregue(t, entregues[t.codigo]) if t.codigo in entregues else _status(t, anexos.get(t.codigo))
+        # anexos ainda não enviados ficam no navegador do candidato; aqui só o que o Lyceum já registrou
+        lista = [_status_entregue(t, entregues[t.codigo]) if t.codigo in entregues else _status(t, None)
                  for t in tipos]
         if entregues and all(t.codigo in entregues for t in tipos if t.obrigatorio):
             self.avancar_etapa(sid, cod_candidato, "pagamento")
         return lista
 
     async def anexar(self, sid: str | None, cod_candidato: str, cod_concurso: str, tipo: str, nome: str,
-                     conteudo: bytes, mime: str, ocr: OcrResultado | None) -> DocumentoStatus:
+                     conteudo: bytes, mime: str, ocr: OcrResultado | None) -> tuple[DocumentoStatus, Anexo]:
+        """Valida e prepara (comprime fotos) um documento. Não guarda nada: o navegador guarda o arquivo e o
+        reenvia no envio final, quando este método roda de novo para montar o que vai ao Lyceum."""
         t = next((x for x in await self.documentos_exigidos(sid) if x.codigo == tipo), None)
         if not t:
             raise PortalError(404, "Documento não solicitado neste processo.")
@@ -582,29 +547,17 @@ class ClienteLegado:
             raise PortalError(422, f"Este arquivo tem {_mb(len(conteudo))}; o limite do Lyceum é "
                                    f"{_mb(self.max_arquivo)} por arquivo. Reduza o arquivo ou envie uma foto.",
                               {"arquivo": "Arquivo grande demais."})
-        anexos = self._anexos(sid, cod_candidato)
-        total = sum(len(a.conteudo) for k, a in anexos.items() if k != tipo) + len(conteudo)
-        if total > LIMITE_ANEXOS:
-            raise PortalError(413, "O total de arquivos anexados passou do limite. Reduza o tamanho dos arquivos.")
-        anexos[tipo] = Anexo(nome=nome, conteudo=conteudo, mime=mime, ocr=ocr,
-                             em=time.strftime("%d/%m/%Y %H:%M"))
-        return _status(t, anexos[tipo])
-
-    async def remover_anexo(self, sid: str | None, cod_candidato: str, tipo: str) -> DocumentoStatus:
-        t = next((x for x in await self.documentos_exigidos(sid) if x.codigo == tipo), None)
-        if not t:
-            raise PortalError(404, "Documento não solicitado neste processo.")
-        self._anexos(sid, cod_candidato).pop(tipo, None)
-        return _status(t, None)
+        anexo = Anexo(nome=nome, conteudo=conteudo, mime=mime, ocr=ocr, em=time.strftime("%d/%m/%Y %H:%M"))
+        return _status(t, anexo), anexo
 
     async def enviar_documentos(self, sid: str | None, cod_candidato: str, cod_concurso: str,
-                                simular: bool) -> EnvioDocumentosResultado:
+                                anexos: dict[str, Anexo], simular: bool) -> EnvioDocumentosResultado:
         """Monta o multipart igual ao form frm-documentos (um campo por documento; vazio quando não anexado).
 
         simular=True: valida e registra, sem chamar o Lyceum (o POST real FINALIZA a inscrição).
         """
         tipos = await self.documentos_exigidos(sid)
-        anexos = self._anexos(sid, cod_candidato)
+        anexos = dict(anexos)
         entregues = await self.documentos_entregues(sid, cod_candidato, cod_concurso)
         for codigo in list(anexos):
             if codigo in entregues:  # nunca reenviar o que o Lyceum já tem

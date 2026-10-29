@@ -3,6 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { api, setUnauthorizedHandler } from "../api/client";
 import type { Pessoa } from "../api/types";
 import { Spin } from "./ui";
+import { limparAnexos } from "../lib/anexosLocais";
 
 interface AuthState {
   pessoa: Pessoa | null;
@@ -27,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
   const sair = useCallback(async () => {
     await api.logout().catch(() => {});
+    await limparAnexos(); // documentos pessoais não ficam guardados no computador depois de sair
     setPessoa(null);
   }, []);
 

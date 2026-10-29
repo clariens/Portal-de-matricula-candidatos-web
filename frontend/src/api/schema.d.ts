@@ -201,10 +201,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Enviar Documento */
-        post: operations["enviar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"];
-        /** Remover Documento */
-        delete: operations["remover_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__delete"];
+        /**
+         * Anexar Documento
+         * @description Confere o documento e devolve o resultado com um selo assinado. Nada fica guardado no servidor: o
+         *     navegador guarda o arquivo + selo e os devolve em POST /envio-documentos.
+         */
+        post: operations["anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -221,7 +224,8 @@ export interface paths {
         put?: never;
         /**
          * Enviar Documentos
-         * @description Envia ao Lyceum, de uma vez, os documentos anexados. No legado isso FINALIZA a inscrição.
+         * @description Envia ao Lyceum, de uma vez, os documentos que o navegador guardou (arquivo + selo de cada um).
+         *     No legado o primeiro envio FINALIZA a inscrição.
          */
         post: operations["enviar_documentos_api_v1_inscricoes__cod_candidato__envio_documentos_post"];
         delete?: never;
@@ -373,8 +377,8 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** Body_enviar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post */
-        Body_enviar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post: {
+        /** Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post */
+        Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post: {
             /** Arquivo */
             arquivo: string;
             /**
@@ -587,6 +591,8 @@ export interface components {
             /** Observacao */
             observacao?: string | null;
             analise?: components["schemas"]["OcrResultado"] | null;
+            /** Selo */
+            selo?: string | null;
         };
         /** Endereco */
         Endereco: {
@@ -1213,7 +1219,7 @@ export interface operations {
             };
         };
     };
-    enviar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post: {
+    anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post: {
         parameters: {
             query?: never;
             header?: never;
@@ -1225,41 +1231,9 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "multipart/form-data": components["schemas"]["Body_enviar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"];
+                "multipart/form-data": components["schemas"]["Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"];
             };
         };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DocumentoStatus"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    remover_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                tipo: string;
-                cod_candidato: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -1290,7 +1264,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "multipart/form-data": Record<string, never>;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

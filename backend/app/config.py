@@ -3,7 +3,6 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Sempre o backend/.env, de qualquer pasta onde o servidor seja iniciado (antes era relativo à pasta atual e,
@@ -48,10 +47,6 @@ class Settings(BaseSettings):
     ia_documentos_concorrencia: int = 4  # chamadas simultâneas por processo (protege a cota da conta)
     ia_documentos_limite_diario_usd: float = 20.0  # acima disso, pausa a IA e manda para conferência manual
     ia_documentos_tentativas_por_documento: int = 8  # por inscrição e tipo, na sessão
-
-    # Estado compartilhado entre instâncias (obrigatório na Vercel): Redis do Marketplace (Upstash).
-    # Vazio: estado só na memória do processo (desenvolvimento local, um processo).
-    redis_url: str = Field(default="", validation_alias=AliasChoices("REDIS_URL", "KV_URL"))
 
     portal_session_secret: str = "dev-inseguro"
     portal_session_horas: int = 12

@@ -4,8 +4,8 @@ O cookie carrega só a identidade (codPessoa, login, nome) e um id de sessão al
 Toda autorização sobre inscrições é feita no servidor a partir dela: ids vindos da URL ou do corpo
 nunca são aceitos como autoridade, porque o Basic de serviço do Lyceum age em nome de qualquer pessoa.
 
-O `sid` indexa estado que fica SÓ no servidor (ex.: a sessão JSESSIONID do candidato no portal
-legado, ver services/lyceum/legado.py). Ele é exposto ao gateway pela context var `sessao_atual`,
+O `sid` amarra a sessão do candidato no portal legado (JSESSIONID), que viaja num segundo cookie,
+criptografado (`portal_legado`, ver services/lyceum/legado.py). Ele é exposto ao gateway pela context var `sessao_atual`,
 definida pela dependência `current_user` (async, para rodar no mesmo contexto da rota).
 """
 

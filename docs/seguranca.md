@@ -15,6 +15,14 @@ Quem tem o Basic consegue agir em nome de **qualquer** candidato, porque o Lyceu
 - Cookie `portal_session`: assinado com `PORTAL_SESSION_SECRET` (itsdangerous), `HttpOnly`, `SameSite=Lax`, `Secure` em
   produção (`PORTAL_COOKIE_SECURE=true`), expira em `PORTAL_SESSION_HORAS` (12 h).
 - O backend **recusa iniciar** com o segredo de sessão padrão ou sem a configuração do Lyceum.
+- Sessão do legado (JSESSIONID do candidato): cookie `portal_legado` **criptografado** (Fernet, chave derivada do
+  `PORTAL_SESSION_SECRET`), `HttpOnly`, `Path=/api` e com validade de 25 min. O navegador não lê o JSESSIONID, e
+  cookie adulterado ou de outra sessão é descartado. Trocar o `PORTAL_SESSION_SECRET` derruba todas as sessões.
+
+## Anexos no navegador (LGPD)
+- Até o envio final, os documentos (inclusive RG) ficam no **IndexedDB do navegador** do candidato. São apagados
+  ao enviar, ao remover, ao **sair** e depois de 24 h. Em computador compartilhado, o candidato deve clicar em Sair.
+- O selo assinado (`app/core/selo.py`) impede trocar o arquivo depois da conferência ou forjar o resultado da IA.
 - CSRF: SameSite=Lax mais exigência de `X-Requested-With` em métodos mutáveis. Um formulário cross-site não consegue enviar esse header.
 
 ## Upload
