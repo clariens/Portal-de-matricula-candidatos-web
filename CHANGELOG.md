@@ -4,6 +4,8 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
 
 ## [Não lançado]
 ### Adicionado
+- **Plano das próximas etapas** em `docs/roadmap.md` (pagamento de ponta a ponta e telas próprias das
+  áreas de interesse) e CHECKLIST reorganizado com a situação real.
 - **Cabeçalho com "Área de interesse"** (Graduação → Vestibular Tradicional, Transferência Externa, Enem,
   Segunda Graduação, Tradicional Catalão) e **"Cadastre-se"** à direita para quem não entrou. Os dados vêm do
   cabeçalho do Processo Seletivo (`GET /api/v1/publico/cabecalho`), com os subgrupos conhecidos se o legado
@@ -147,9 +149,13 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
 - `POST /v2/pessoas/autenticacao` autentica **aluno por RA**, não candidato por CPF/e-mail. Candidato sem RA não consegue entrar (ver `docs/integracao-techne.md`).
 - `/v2/tabela/candidatos` expõe `senha_web` aparentemente em texto puro: reportar ao time Lyceum.
 
-### Pendente
-- Mapear no Swagger Techne v2 os endpoints de inscrições, candidato, documentos, pagamento e conclusão (ver `docs/integracao-techne.md`).
+### Pendente (detalhes em `docs/roadmap.md`)
+- **Etapa A · Pagamento de ponta a ponta:** primeiro `efetivar.json` real (com autorização), valores das parcelas,
+  cupom de 100%, cobrança após confirmar e Conclusão pelo legado (`/r/terminoIngresso`, `proximo.json`).
+- **Etapa B · Telas próprias das áreas de interesse:** lista por subgrupo, busca, detalhe da oferta, inscrição e
+  cadastro no portal (hoje o cabeçalho abre as páginas do legado).
 - Pagamento com cartão via gateway com tokenização (PCI).
+- Rotas de candidato na API Techne v2, quando o Lyceum liberar.
 
 ## [0.1.0] - 2026-10-16
 Primeira versão funcional de ponta a ponta em modo mock. Integração real limitada ao login.

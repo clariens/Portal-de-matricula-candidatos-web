@@ -13,6 +13,10 @@ docker run -p 8000:8000 --env-file backend/.env portal-matricula
 |---|---|
 | `LYCEUM_API_BASE_URL` | URL de produção da API Techne |
 | `LYCEUM_API_BASIC_USER` / `LYCEUM_API_BASIC_PASSWORD` | Usuário técnico de produção (secret) |
+| `LYCEUM_AUTH_MODO` / `LYCEUM_LEGADO_BASE_URL` | `legado` / URL do Processo Seletivo de produção |
+| `LYCEUM_DOCUMENTOS_MODO` / `LYCEUM_PAGAMENTO_MODO` | `enviar` só depois de validado em DEV (padrão `simular`) |
+| `LYCEUM_UPLOAD_MAX_KB_POR_ARQUIVO` / `_TOTAL` | limites do Processo Seletivo de produção (confirmar com o time Lyceum) |
+| `ANTHROPIC_API_KEY`, `IA_DOCUMENTOS_ATIVA` | conferência de documentos por IA (secret; exige aval de LGPD/IA CoE) |
 | `PORTAL_SESSION_SECRET` | `python -c "import secrets; print(secrets.token_urlsafe(48))"` (secret) |
 | `PORTAL_COOKIE_SECURE` | `true` |
 | `PORTAL_CORS_ORIGINS` | Vazio (mesma origem) |
@@ -20,7 +24,7 @@ docker run -p 8000:8000 --env-file backend/.env portal-matricula
 
 ## Proxy / nginx
 - TLS obrigatório (o cookie é `Secure`).
-- `client_max_body_size 15m;`. Com Base64, um arquivo de 10 MB vira cerca de 14 MB no envio ao Lyceum. Ajustar também o nginx do Lyceum.
+- `client_max_body_size` acima do maior envio final (todos os documentos numa requisição). No DEV do Processo Seletivo o limite é 1 MiB; ver a seção de limites abaixo.
 - Repassar `X-Forwarded-*` (o uvicorn sobe com `--proxy-headers`).
 - Cache longo em `/assets/*` (nomes com hash) e em `/ocr/*`; sem cache no `index.html`.
 

@@ -1,67 +1,78 @@
 # Checklist de entrega
 
-Legenda: `[x]` feito · `[ ]` pendente · **(Lyceum)** depende do time Lyceum/Techne.
+Legenda: `[x]` feito · `[ ]` pendente · **(Lyceum)** depende do time Lyceum/Techne · **(autorização)** grava algo
+irreversível no Lyceum e precisa de aval antes do primeiro envio real. Visão geral e prioridades em
+[docs/roadmap.md](docs/roadmap.md).
 
 ## Fase 0 — Fundação e descoberta
-- [x] Scaffold backend (FastAPI, pydantic-settings, ruff, pytest) e frontend (Vite React TS, vitest)
-- [x] `.env.example`, `.gitignore`, README, CHANGELOG `0.1.0`
+- [x] Backend (FastAPI, pydantic-settings, ruff, pytest) e frontend (Vite React TS, vitest, Playwright)
 - [x] Contrato da API `/api/v1` (Pydantic → OpenAPI → tipos TS)
-- [x] `LyceumGateway` + `TechneGateway` (dublê só nos testes) com tabela `ENDPOINTS`
-- [ ] Levantar no Swagger Techne v2 os endpoints de cada necessidade e capturar fixtures mascaradas — **(Lyceum)**
-- [ ] Confirmar se `/v2/pessoas/autenticacao` aceita candidato (CPF/e-mail) e qual id retorna (pessoa vs. candidato) — **(Lyceum)**
-- [ ] Registrar as lacunas sem endpoint v2 como pendências formais com o time Lyceum — **(Lyceum)**
+- [x] `LyceumGateway` + `TechneGateway`; dublê do Lyceum só nos testes (`backend/tests/fake_lyceum.py`)
+- [x] Integração pelo Processo Seletivo legado, na sessão do próprio candidato (a API v2 não autentica candidato)
+- [x] Sem modo de demonstração: o portal só fala com o Lyceum configurado e não inicia sem configuração
+- [ ] Rotas de candidato na API Techne v2 (login, inscrições, documentos, pagamento, conclusão) — **(Lyceum)**
 
-## Fase 1 — Login e histórico
-- [x] Sessão por cookie httpOnly assinado, `/auth/login`, `/auth/logout`, `/me`
-- [x] Guarda de rota no front e retorno à página pedida após o login
-- [x] Login ligado ao Techne v2 (`POST /v2/pessoas/autenticacao`)
-- [x] Histórico em cartões, com ação principal conforme a situação
-- [ ] `listar_inscricoes` no Techne v2 — **(Lyceum)**
-- [ ] "Esqueci minha senha": definir o fluxo (Techne ou portal atual) — **(Lyceum)**
+## Fase 1 — Login, histórico e cabeçalho
+- [x] Login real por CPF/e-mail (`j_security_check`), histórico real (`/r/historico`)
+- [x] Sessão: cookie assinado + cookie criptografado com a sessão do legado (sem estado no servidor)
+- [x] `/me` sem sessão responde `null` (sem erro no console ao abrir o site)
+- [x] Tela de login com fundo de tela inteira, logo no card e monitor cardíaco animado
+- [x] Esqueci minha senha pelo fluxo do legado (`/recuperarsenha`)
+- [x] Cabeçalho: logo, Área de interesse (subgrupos lidos do legado) e Cadastre-se
+- [x] Mensagem clara quando o Processo Seletivo está fora do ar
+- [ ] Recuperação de senha testada de verdade com uma conta autorizada (envia e-mail ao dono)
+- [ ] Rate limit no login e na recuperação de senha
 
 ## Fase 2 — Etapa Dados
-- [x] GET/PUT candidato com payload limpo e erros por campo
-- [x] Máscaras, validação local, CEP preenchendo o endereço automaticamente
-- [x] Retomada por URL e "Continuar depois"
-- [ ] `obter_candidato` / `atualizar_candidato` no Techne v2 — **(Lyceum)**
-- [ ] Código de município Lyceum (ex.: `002174`) a partir do CEP — hoje a CEP vem do ViaCEP no modo techne — **(Lyceum)**
+- [x] Leitura (`/r/ingresso`) e gravação real (`atualizar.json`) validadas em DEV
+- [x] CEP pelo ViaCEP + código de município do Lyceum; data de nascimento normalizada
+- [x] Sexo "Outros" e lista de estado civil do Lyceum
 - [ ] Países/municípios de nascimento (o legado envia `paisNascimento`/`municipioNascimento`)
 
 ## Fase 3 — Etapa Documentos
-- [x] Upload individual com arrastar e soltar, prévia e progresso
-- [x] OCR local self-hosted (sem CDN) com regras cpf/id/escolar/declaração (≤ 2022)/residência/nome
-- [x] Divergente/ilegível exige confirmação antes do envio para conferência manual
-- [x] BFF valida extensão, tamanho e assinatura mágica
-- [ ] `listar_documentos` / `enviar_documento` no Techne v2 — **(Lyceum)**
-- [ ] Confirmar a tabela código↔documento (hoje pela ordem do DOM legado) — **(Lyceum)**
-- [ ] Testar o limite de body do nginx (`client_max_body_size`) com PDF de ~10 MB em Base64
+- [x] Lista de documentos lida da página real; obrigatórios conforme o processo
+- [x] Conferência por IA (Claude) no servidor; OCR do navegador como reserva; WEBP aceito
+- [x] Anexos guardados no navegador (IndexedDB) com selo assinado; nada no servidor entre requisições
+- [x] Primeiro envio em lote (`uploadDocumentosPorProcesso`) e envios seguintes um a um (`documentosCandidato/upload`)
+- [x] "Enviado" só quando aparece em "Documentos Ingresso"; nunca reenvia o que o Lyceum já tem
+- [x] Compressão de fotos; limites de tamanho do DEV medidos (1.000.000 bytes por arquivo, 1 MiB por envio)
+- [ ] Limites de upload de produção — **(Lyceum)**
+- [ ] Substituir documento recusado pela secretaria (mesma rota `documentosCandidato/upload`)
 
-## Fase 4 — Etapa Pagamento
-- [x] Responsável financeiro: Eu, Outra pessoa (CPF), Empresa (CNPJ) com endereço
-- [x] Boleto e PIX com valor da parcela; cartão desabilitado
-- [x] Cupom com validação imediata e recálculo dos planos
-- [x] Planos, cupom e efetivação pelas rotas do legado (`/r/pagamentoIngresso`, `validarvoucher`, `efetivar.json`)
-- [x] Planos e cupom conferidos em DEV; efetivação validada em simulação
-- [ ] Primeiro `efetivar.json` real em DEV (cria a matrícula): **pedir autorização** e ligar `LYCEUM_PAGAMENTO_MODO=enviar`
-- [ ] Voucher de 100% (o legado troca o plano por `N:N:N:1` e esconde as formas de pagamento)
-- [ ] Valores das parcelas: a página do legado não traz; ver `GET /v2/tabela/concursos` (`boleto_valor`)
-- [ ] `opcoes_pagamento` / `validar_cupom` / `efetivar_pagamento` no Techne v2 — **(Lyceum)**
-- [ ] Gateway de cartão com tokenização (PCI) — decisão de fornecedor
-- [ ] Linha digitável / PIX copia e cola na tela (se o Lyceum devolver)
+## Fase 4 — Etapa Pagamento (próxima prioridade: Etapa A do roadmap)
+- [x] Responsável financeiro: Eu, Outra pessoa (campos do legado), Empresa (CNPJ e inscrições)
+- [x] Planos lidos da página real (Boleto, PIX; Cartão "Em breve"); "6 mensalidades no semestre"
+- [x] Cupom validado no legado (`validarvoucher`)
+- [x] Confirmação monta o corpo do `efetivar.json`; validada em simulação
+- [ ] Primeiro `efetivar.json` real em DEV (cria a matrícula) — **(autorização)**
+- [ ] Valores das parcelas e total (fonte a definir: `GET /v2/tabela/concursos` ou API de planos)
+- [ ] Cupom de 100% (plano `N:N:N:1`, "Bolsa integral")
+- [ ] Cobrança real depois de confirmar (boleto/PIX da 1ª parcela via `/r/terminoIngresso`)
+- [ ] Abrir o pagamento numa sessão nova sem pedir "Revisar meus dados"
+- [ ] Cartão de crédito com tokenização (PCI) — decisão de fornecedor
 
 ## Fase 5 — Conclusão e pós-matrícula
-- [x] Tela de sucesso: matrícula, 1ª parcela, contrato Clicksign, disciplinas
-- [x] Confirmar conclusão e mostrar questionário pendente
-- [x] Histórico mostra "Pré-Matriculado" com Contrato e Documentos
-- [ ] `obter_matricula` / `confirmar_matricula` / `questionarios_pendentes` no Techne v2 — **(Lyceum)**
-- [ ] Status real do contrato Clicksign (webhook ou consulta)
+- [x] Tela de sucesso (matrícula, 1ª parcela, contrato, disciplinas) — hoje só no dublê dos testes
+- [ ] Conclusão pelo legado: `/r/terminoIngresso` e `proximo.json` — **(autorização)**
+- [ ] Questionário pendente (`/r/questionario`)
+- [ ] Status real do contrato Clicksign
 
-## Fase 6 — Endurecimento e entrega
-- [x] Testes: pytest (26), vitest (7) e e2e Playwright (fluxo completo com OCR real)
+## Fase 6 — Áreas de interesse e cadastro próprios (Etapa B do roadmap)
+- [x] Mapeamento do cabeçalho, busca, subgrupos e cadastro do legado (`docs/cabecalho-processo-seletivo.md`)
+- [ ] Lista de processos por subgrupo (Vestibular Tradicional, Transferência Externa, Enem, Segunda Graduação, Tradicional Catalão)
+- [ ] Busca de cursos no cabeçalho
+- [ ] Detalhe da oferta (mapear `oferta?id=`)
+- [ ] Inscrição em uma oferta (mapear o fluxo do legado) — **(autorização)**
+- [ ] Cadastro próprio (`cadastrar.json`, aceite LGPD) — **(autorização)**
+- [ ] Menu do cabeçalho apontando para as telas novas (legado como reserva)
+
+## Fase 7 — Endurecimento e entrega
+- [x] Testes: pytest (118), vitest (17) e e2e Playwright (fluxo completo, cabeçalho, recuperação de senha)
 - [x] Logs `[lyceum]` sem PII; `/api/v1/health`
-- [x] Dockerfile de imagem única
-- [ ] Auditoria de acessibilidade (leitor de tela, contraste) e teste em celulares reais
-- [ ] Rate limit no login (BFF ou proxy)
+- [x] Vercel (Services) sem banco de dados; validado com duas instâncias atendendo o mesmo candidato
 - [ ] CI (lint + testes + e2e) no pipeline
-- [ ] Variáveis de produção (base URL, Basic, segredo, `PORTAL_COOKIE_SECURE=true`)
+- [ ] Variáveis de produção (`LYCEUM_*` de produção, segredo novo, `PORTAL_COOKIE_SECURE=true`)
+- [ ] Aval de LGPD / IA CoE; teto de gasto da IA compartilhado entre instâncias
+- [ ] Rotação das credenciais usadas no desenvolvimento
+- [ ] Acessibilidade e teste em celulares reais
 - [ ] Piloto com uma unidade e plano de corte do portal antigo

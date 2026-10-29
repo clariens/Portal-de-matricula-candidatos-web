@@ -1,8 +1,27 @@
 # Integração com o Lyceum (Techne)
 
-O portal fala com o Lyceum **apenas pela API REST Techne**, sempre pelo BFF. O mapa de rotas do portal legado
-(`/processo-seletivo/r/*.json`, capturado em 08/10/2026) é usado só como **especificação funcional**: mostra o que
-cada etapa precisa ler e gravar. O portal não chama o legado.
+O portal fala com o Lyceum sempre pelo BFF. O plano inicial era usar só a API REST Techne v2, mas ela só autentica
+**aluno por RA** e o usuário técnico não acessa as rotas de candidato (grupo v1, 403). Por isso, desde 20/10/2026, o
+BFF segue o **mapa de rotas do Processo Seletivo legado na sessão do próprio candidato** (`ClienteLegado`, em
+`backend/app/services/lyceum/legado.py`) e usa a API v2 onde ela serve.
+
+## De onde vem cada coisa hoje (Lyceum DEV)
+| Necessidade | Fonte | Rotas |
+|---|---|---|
+| Login | legado | `GET /r/historico` (abre a sessão) → `POST /j_security_check`; `idPessoa` em `/r/alterarDados` |
+| Pessoa | API v2 | `GET /v2/pessoas/idPessoa/{id}/obterPessoa` |
+| Esqueci minha senha | legado | `GET /recuperarsenha` → `POST /recuperarsenha/recuperar.json` → `GET /recuperarsenha/sucesso` |
+| Cabeçalho (áreas de interesse, cadastro) | legado | menu de `GET /home` (cache de 10 min; reserva com os subgrupos conhecidos) |
+| Histórico | legado | `GET /r/historico` |
+| Dados do candidato | legado | `GET /r/ingresso?codCandidato&codConcurso`, `POST /r/ingresso/atualizar.json`; municípios em `/endereco/*` |
+| CEP | ViaCEP + API v2 | `GET /v2/comum/cep/{cep}/enderecos` (código de município do Lyceum) |
+| Documentos exigidos e entregues | legado | `GET /r/documentosPorProcesso`, `GET /r/documentosPorProcessoCandidato?q=` |
+| Envio de documentos | legado | primeiro envio: `POST /r/uploadDocumentosPorProcesso` (lote); depois: `POST /r/documentosCandidato/upload` (um a um) |
+| Pagamento | legado | `GET /r/pagamentoIngresso`, `POST …/validarvoucher`, `POST …/efetivar.json` (em simulação) |
+| Conclusão | — | ainda não ligada: `/r/terminoIngresso` e `proximo.json` (ver [roadmap.md](roadmap.md)) |
+
+A tabela abaixo é o levantamento da API v2 (16/10/2026), mantido para a migração quando o Lyceum liberar rotas de
+candidato.
 
 ## Como a chamada é feita
 - Base: `LYCEUM_API_BASE_URL` (TST: `https://tst-lyceum.clariens.com.br/api`).

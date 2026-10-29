@@ -63,12 +63,13 @@ Na home há também `POST home/cadastroResponsavel.json` (cadastro de responsáv
 
 O "Entrar" não aparece no cabeçalho, porque ele já está na própria tela de login.
 
-## Proposta para o portal novo
+## Próxima etapa: telas próprias
 
-1. Cabeçalho com "Área de interesse → Graduação → subgrupos" e a busca. Para começar, os links abrem as páginas do
-   legado. Depois, uma lista própria lida de `subgrupo?id=` / `busca`.
-2. "Cadastre-se" e "Esqueci minha senha" apontam para as páginas do legado (`/cadastro?et=4`, `/recuperarsenha`).
-   Um cadastro próprio só se `cadastro/cadastrar.json` for aprovado como rota oficial, porque ele cria a pessoa no
-   Lyceum.
-3. Atenção: os ids dos subgrupos e das ofertas são de **produção**. No DEV podem ser outros, então é preciso
-   conferir em `desenvolvimento-lyceum` antes.
+Hoje os links do cabeçalho abrem as páginas do legado. As telas próprias (lista por subgrupo, busca, detalhe da
+oferta, inscrição e cadastro) estão planejadas na **Etapa B** de [roadmap.md](roadmap.md) e na Fase 6 do
+[CHECKLIST](../CHECKLIST.md). Antes de implementar, falta mapear `oferta?id=` e o fluxo de inscrição a partir da
+oferta. Cadastro (`cadastrar.json`) e inscrição criam registros no Lyceum: precisam de autorização antes do primeiro
+envio real.
+
+Os subgrupos (4, 15, 16, 17, 31) são iguais em DEV e produção hoje. As ofertas mudam a cada processo, então nunca
+devem ficar fixas no código.

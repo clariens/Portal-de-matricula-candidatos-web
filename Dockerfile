@@ -17,5 +17,5 @@ COPY --from=front /src/frontend/dist /srv/frontend/dist
 RUN useradd -r portal && chown -R portal /srv
 USER portal
 EXPOSE 8000
-# Variáveis obrigatórias em produção: LYCEUM_MODE=techne, LYCEUM_API_*, PORTAL_SESSION_SECRET, PORTAL_COOKIE_SECURE=true
+# Variáveis obrigatórias em produção: LYCEUM_API_*, LYCEUM_LEGADO_BASE_URL, PORTAL_SESSION_SECRET, PORTAL_COOKIE_SECURE=true
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

@@ -58,8 +58,7 @@ escolher/arrastar arquivo
   └─ 7. tudo certo              → ✓ Documento conferido              (anexa sozinho)
 ```
 
-Anexar ≠ enviar: o arquivo fica no servidor do portal como "pronto para envio". O envio ao Lyceum acontece em
-"Enviar documentos e continuar" (ver `LYCEUM_DOCUMENTOS_MODO`).
+Anexar ≠ enviar: o arquivo conferido fica **no navegador** (IndexedDB), com o selo assinado que o servidor devolve na conferência, como "pronto para envio". Em "Enviar documentos e continuar" o navegador devolve arquivo + selo e o BFF envia ao Lyceum (ver `docs/api-bff.md`).
 
 Código: `frontend/src/lib/ocr/analisar.ts` (regras, funções puras) e `frontend/src/pages/wizard/EtapaDocumentos.tsx` (tela).
 

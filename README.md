@@ -1,25 +1,37 @@
 # Portal de Matrícula do Candidato — Clariens
 
-Substitui o portal legado do Processo Seletivo (`/processo-seletivo`, Java EE + jQuery) por uma SPA com wizard de matrícula,
-integrada ao Lyceum **somente pela API REST Techne v2**, através de um BFF que guarda a credencial de serviço.
+Substitui o portal legado do Processo Seletivo (`/processo-seletivo`, Java EE + jQuery) por uma SPA com wizard de
+matrícula. O navegador fala só com um BFF, que fala com o Lyceum.
 
 ```
-Navegador (React SPA)  ── cookie httpOnly ──▶  BFF FastAPI /api/v1  ── Basic de serviço ──▶  Lyceum Techne v2
-   OCR local (tesseract.js)
+Navegador (React SPA)  ── cookies httpOnly ──▶  BFF FastAPI /api/v1  ──▶  Processo Seletivo (legado, sessão do candidato)
+  anexos no IndexedDB                              sem estado entre          + API Techne v2 (Basic de serviço)
+                                                   requisições               + Claude (conferência de documentos)
 ```
 
-Fluxo do candidato: **Login → Minhas inscrições → Dados → Documentos (OCR) → Pagamento → Conclusão (contrato Clicksign)**.
+Fluxo do candidato: **Login → Minhas inscrições → Dados → Documentos (conferência por IA) → Pagamento → Conclusão**.
+
+| Parte | Situação (Lyceum DEV) |
+|---|---|
+| Login, histórico, esqueci minha senha, cabeçalho | ✅ funcionando |
+| Dados e Documentos | ✅ leitura e gravação reais |
+| Pagamento | ⚠ planos e cupom reais; confirmação em simulação |
+| Conclusão | ❌ ainda não ligada ao Lyceum |
+| Áreas de interesse e Cadastre-se | ⚠ abrem as páginas do legado; telas próprias são a próxima fase |
+
+**Próximas etapas:** [docs/roadmap.md](docs/roadmap.md): (A) pagamento de ponta a ponta e conclusão; (B) telas
+próprias das áreas de interesse, busca, oferta e cadastro.
 
 | Pasta | Conteúdo |
 |---|---|
-| [backend/](backend/) | BFF FastAPI + httpx, `LyceumGateway` ligado ao Lyceum (API Techne v2 + portal legado na sessão do candidato) |
+| [backend/](backend/) | BFF FastAPI + httpx, `LyceumGateway` (Processo Seletivo legado + API Techne v2), conferência por IA |
 | [frontend/](frontend/) | React 18 + TypeScript + Vite, visual portado do protótipo |
-| [docs/](docs/) | Arquitetura, integração Techne, contrato da API, segurança, OCR, deploy |
+| [docs/](docs/) | Roadmap, arquitetura, integração, contrato da API, segurança, conferência de documentos, deploy, cabeçalho |
 | [CHECKLIST.md](CHECKLIST.md) | Andamento por fase |
 | [CHANGELOG.md](CHANGELOG.md) | Histórico de versões |
 
 ## Pré-requisitos
-- Python 3.11+ e Node 20+
+- Python 3.12+ (a Vercel usa 3.14) e Node 20+
 
 ## Rodar localmente (contra o Lyceum DEV)
 
@@ -41,14 +53,17 @@ npm run dev                       # http://localhost:5173 (proxy /api → :8000)
 
 O portal **não tem modo de demonstração**: sempre fala com o Lyceum configurado no `backend/.env`
 (`LYCEUM_API_BASE_URL`, `LYCEUM_API_BASIC_USER`, `LYCEUM_API_BASIC_PASSWORD`, `LYCEUM_LEGADO_BASE_URL` e um
-`PORTAL_SESSION_SECRET` forte). Sem essas variáveis o servidor **não inicia** e diz o que falta. Inicie sempre de
-dentro de `backend/`, onde está o `.env`. Entre com um candidato real do ambiente (CPF e senha do Processo Seletivo).
-Ver [docs/integracao-techne.md](docs/integracao-techne.md).
+`PORTAL_SESSION_SECRET` forte). Sem essas variáveis o servidor **não inicia** e diz o que falta. O `backend/.env` é
+lido de qualquer pasta. Entre com um candidato real do ambiente (CPF e senha do Processo Seletivo).
+
+Gravações irreversíveis ficam em simulação por padrão: `LYCEUM_DOCUMENTOS_MODO` e `LYCEUM_PAGAMENTO_MODO`
+(`simular` | `enviar`). Ver [docs/integracao-techne.md](docs/integracao-techne.md) e, para publicar,
+[docs/deploy.md](docs/deploy.md) (Vercel).
 
 ## Testes
 
 ```bash
-cd backend && .venv/Scripts/python -m pytest      # fluxo da API com dublê do Lyceum (tests/fake_lyceum.py), legado e Techne com respx
+cd backend && .venv/Scripts/python -m pytest      # 118 testes: API com dublê do Lyceum (tests/fake_lyceum.py), legado e Techne com respx
 cd frontend && npm test                           # máscaras, CPF/CNPJ, regras do OCR
 cd frontend && npx playwright install chromium && npm run e2e   # fluxo completo no navegador com o dublê do Lyceum (só teste)
 ```
