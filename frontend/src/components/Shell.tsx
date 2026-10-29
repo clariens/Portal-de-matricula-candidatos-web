@@ -1,19 +1,32 @@
-import { useEffect, useState } from "react";
-import { Outlet, useNavigate } from "react-router-dom";
-import { apiLog } from "../api/client";
+import { useEffect, useRef, useState } from "react";
+import { Link, Outlet, useNavigate } from "react-router-dom";
+import { api, apiLog } from "../api/client";
+import type { Cabecalho } from "../api/types";
+import logo from "../assets/clariens-educacao.png";
 import { useAuth } from "./auth";
 
 export function Shell() {
   const { pessoa, sair } = useAuth();
   const nav = useNavigate();
+  const [cab, setCab] = useState<Cabecalho | null>(null);
+  useEffect(() => {
+    api.cabecalho().then(setCab).catch(() => setCab(null)); // sem o menu, o portal segue funcionando
+  }, []);
   return (
     <>
       <header className="topbar">
-        <div className="brand">
-          <b>Clariens</b>
-          <span>Educação</span>
-          <span className="area">· Medicina</span>
-        </div>
+        <Link className="brand-logo" to="/" aria-label="Clariens Educação: início">
+          <img src={logo} alt="Clariens Educação" width={87} height={34} />
+        </Link>
+        <AreasDeInteresse cab={cab} />
+        {!pessoa && (
+          <nav aria-label="Conta">
+            <a className="btn-cadastro" href={cab?.cadastroUrl} target="_blank" rel="noopener noreferrer"
+               aria-disabled={!cab || undefined}>
+              Cadastre-se
+            </a>
+          </nav>
+        )}
         {pessoa && (
           <nav aria-label="Principal">
             <button type="button" onClick={() => nav("/inscricoes")}>
@@ -83,5 +96,49 @@ function ApiInspector() {
         </div>
       </aside>
     </>
+  );
+}
+
+/** "Área de interesse": os subgrupos do Processo Seletivo (abrem no portal do Processo Seletivo).
+ *  O botão aparece desde o início (carregando) para o cabeçalho não "pular" quando a lista chega. */
+function AreasDeInteresse({ cab }: { cab: Cabecalho | null }) {
+  const [aberto, setAberto] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setAberto(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setAberto(false);
+    document.addEventListener("mousedown", fora);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("mousedown", fora);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [aberto]);
+  return (
+    <div className="areas" ref={ref}>
+      <button type="button" className="areas-botao" aria-expanded={aberto} aria-controls="menu-areas"
+              aria-busy={!cab || undefined} disabled={!cab} onClick={() => setAberto((a) => !a)}>
+        Área de interesse <span aria-hidden="true">▾</span>
+      </button>
+      {aberto && cab && (
+        <div className="areas-menu" id="menu-areas">
+          {cab.areas.map((a) => (
+            <div key={a.nome}>
+              <span className="areas-grupo">{a.nome}</span>
+              <ul>
+                {a.itens.map((i) => (
+                  <li key={i.url}>
+                    <a href={i.url} target="_blank" rel="noopener noreferrer" onClick={() => setAberto(false)}>
+                      {i.nome}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

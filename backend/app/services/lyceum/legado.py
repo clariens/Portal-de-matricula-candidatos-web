@@ -74,6 +74,7 @@ from app.schemas.pagamento import (
     PagamentoResultado,
     Plano,
 )
+from app.schemas.publico import AreaInteresse, Cabecalho, LinkLegado
 from app.services.imagens import preparar_imagem
 from app.services.lyceum.catalogo import REGRA_POR_TIPO, TIPOS_DOCUMENTO
 from app.services.lyceum.mappers import normalizar_situacao
@@ -83,6 +84,10 @@ log = logging.getLogger("lyceum")
 SESSAO_TTL = 25 * 60  # abaixo dos 30 min padrão do Tomcat
 CACHE_HISTORICO = 30  # s; o histórico é consultado em toda rota de inscrição (checagem de dono)
 CACHE_TIPOS_DOCUMENTO = 300  # s
+CACHE_CABECALHO = 600  # s
+MSG_FORA_DO_AR = "O Processo Seletivo está fora do ar no momento. Tente novamente em alguns minutos."
+CACHE_CABECALHO_RESERVA = 120  # s; com o legado fora, não esperar de novo a cada página aberta
+CABECALHO_TIMEOUT = 4.0  # s; menu é público e não pode segurar a tela de login
 UPLOAD_TIMEOUT = 120.0
 FOTO_MAX_PX, FOTO_QUALIDADE = 2000, 85  # foto enviada ao Lyceum: legível para a secretaria, ~300-600 KB
 _TAMANHO_JAVA_RE = re.compile(r"(FileSizeLimitExceeded|SizeLimitExceeded|MaxUploadSizeExceeded)", re.IGNORECASE)
@@ -240,6 +245,7 @@ class ClienteLegado:
         self.sessoes = sessoes
         self.max_arquivo = max_kb_arquivo * 1024
         self.max_total = max_kb_total * 1024
+        self._cabecalho: tuple[float, Cabecalho] | None = None  # (vale até, cabeçalho): público e igual para todos
 
     def _client(self, cookies: httpx.Cookies | None = None) -> httpx.AsyncClient:
         # Um cliente por chamada: os cookies de um candidato nunca se misturam com os de outro.
@@ -251,9 +257,13 @@ class ClienteLegado:
         """Valida CPF/e-mail + senha, guarda a sessão Java sob `sid` e devolve o idPessoa."""
         async with self._client() as c:
             try:
-                await c.get("/r/historico")
+                pre = await c.get("/r/historico")
+                if pre.status_code >= 500:  # ex.: 502 do proxy com o Tomcat parado
+                    raise LyceumIndisponivel(MSG_FORA_DO_AR)
                 r = await c.post("/j_security_check", data={"j_username": login, "j_password": senha})
                 log.warning("[lyceum-legado] POST /j_security_check → HTTP %s", r.status_code)
+                if r.status_code >= 500:
+                    raise LyceumIndisponivel(MSG_FORA_DO_AR)
                 if r.status_code == 401:
                     m = MSG_ERRO_RE.search(r.text)
                     msg = html.unescape(m[1]).strip() if m else ""
@@ -262,7 +272,7 @@ class ClienteLegado:
                     raise LyceumIndisponivel("Resposta inválida do login do Processo Seletivo")
                 dados = await c.get("/r/alterarDados")
             except httpx.HTTPError:
-                raise LyceumIndisponivel("Não foi possível conectar ao Processo Seletivo") from None
+                raise LyceumIndisponivel(MSG_FORA_DO_AR) from None
             m = ID_PESSOA_RE.search(dados.text) if dados.status_code == 200 else None
             if not m:
                 await c.get("/logout")
@@ -279,6 +289,51 @@ class ClienteLegado:
                 await c.get("/logout")
         except httpx.HTTPError:
             pass  # sessão Java expira sozinha
+
+    # ---------- telas públicas (sem sessão do candidato) ----------
+    async def cabecalho(self) -> Cabecalho:
+        """Áreas de interesse e link de cadastro, lidos do cabeçalho da home do legado (cache de 10 min).
+        Se o legado não responder em poucos segundos, usa os subgrupos conhecidos (mesmos ids em DEV e produção,
+        29/10/2026) e guarda essa reserva por 2 min, para não fazer cada página esperar o legado de novo."""
+        agora = time.time()
+        if self._cabecalho and agora < self._cabecalho[0]:
+            return self._cabecalho[1]
+        try:
+            async with self._client(httpx.Cookies()) as c:
+                r = await c.get("/home", timeout=CABECALHO_TIMEOUT)
+            cab = parse_cabecalho(r.text, _origem(self.base)) if r.status_code in (200, 401) else None
+        except httpx.HTTPError:
+            cab = None
+        if cab and cab.areas:
+            self._cabecalho = (agora + CACHE_CABECALHO, cab)
+            return cab
+        log.warning("[lyceum-legado] cabeçalho indisponível: usando os subgrupos conhecidos por %s s",
+                    CACHE_CABECALHO_RESERVA)
+        reserva = cabecalho_padrao(self.base)
+        self._cabecalho = (agora + CACHE_CABECALHO_RESERVA, reserva)
+        return reserva
+
+    async def recuperar_senha(self, login: str) -> str:
+        """Mesmo fluxo da tela /recuperarsenha do legado: abre a página (sessão anônima), envia o login
+        (e-mail, CPF, RG ou passaporte) e lê a mensagem de sucesso. O legado envia o e-mail de recuperação."""
+        try:
+            async with self._client(httpx.Cookies()) as c:
+                await c.get("/recuperarsenha")
+                ajax = {"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"}
+                r = await c.post("/recuperarsenha/recuperar.json", json={"login": login}, headers=ajax)
+                log.warning("[lyceum-legado] POST /recuperarsenha/recuperar.json → HTTP %s", r.status_code)
+                if r.status_code >= 500:
+                    raise LyceumIndisponivel(MSG_FORA_DO_AR)
+                self._retorno(r, "recuperar senha")
+                s = await c.get("/recuperarsenha/sucesso", headers=ajax)
+        except httpx.HTTPError:
+            raise LyceumIndisponivel(MSG_FORA_DO_AR) from None
+        try:
+            itens = (s.json().get("lyceumRetorno") or {}).get("item") or []
+        except (ValueError, AttributeError):
+            itens = []
+        texto = _texto(str(itens[0])) if itens and itens[0] else ""
+        return texto or "Enviamos as instruções para recuperar a senha ao e-mail cadastrado."
 
     # ---------- leitura de páginas ----------
     async def get(self, sid: str | None, path: str, params: dict | None = None) -> httpx.Response:
@@ -952,3 +1007,37 @@ def parse_pagamento(pagina: str) -> PaginaPagamento:
 
 def _brl(v: float) -> str:
     return "R$ " + f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+# ---------- cabeçalho público (home do legado) ----------
+SUBGRUPOS_CONHECIDOS = [("Vestibular Tradicional", 4), ("Transferência Externa", 15), ("Enem", 16),
+                        ("Segunda Graduação", 17), ("Tradicional Catalão", 31)]
+_AREA_RE = re.compile(r'<li class="dropdown dropdown-submenu">\s*<a[^>]*>\s*([^<]+?)\s*</a>.*?'
+                      r'<ul class="dropdown-menu[^"]*">(.*?)</ul>', re.DOTALL)
+_SUBGRUPO_RE = re.compile(r'<a href="(/[^"]*subgrupo\?id=\d+)">\s*([^<]+?)\s*</a>')
+_CADASTRO_RE = re.compile(r'href="(/[^"]*cadastro\?et=\d+)"')
+
+
+def _origem(base: str) -> str:
+    """https://host/processo-seletivo -> https://host (os links do legado já trazem /processo-seletivo)."""
+    m = re.match(r"(https?://[^/]+)", base)
+    return m[1] if m else base
+
+
+def parse_cabecalho(pagina: str, origem: str) -> Cabecalho | None:
+    areas = []
+    for nome, bloco in _AREA_RE.findall(pagina):
+        itens = [LinkLegado(nome=html.unescape(n), url=origem + html.unescape(h)) for h, n in _SUBGRUPO_RE.findall(bloco)]
+        if itens:
+            areas.append(AreaInteresse(nome=html.unescape(nome), itens=itens))
+    cad = _CADASTRO_RE.search(pagina)
+    if not areas:
+        return None
+    return Cabecalho(areas=areas, cadastro_url=origem + (html.unescape(cad[1]) if cad else "/processo-seletivo/cadastro?et=4"))
+
+
+def cabecalho_padrao(base: str) -> Cabecalho:
+    base = base.rstrip("/")
+    return Cabecalho(areas=[AreaInteresse(nome="Graduação", itens=[
+        LinkLegado(nome=n, url=f"{base}/subgrupo?id={i}") for n, i in SUBGRUPOS_CONHECIDOS])],
+        cadastro_url=f"{base}/cadastro?et=4")

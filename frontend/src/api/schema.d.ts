@@ -55,6 +55,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/recuperar-senha": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recuperar Senha
+         * @description Esqueci minha senha: o Processo Seletivo envia as instruções ao e-mail cadastrado.
+         */
+        post: operations["recuperar_senha_api_v1_auth_recuperar_senha_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/enderecos/ufs": {
         parameters: {
             query?: never;
@@ -336,6 +356,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/publico/cabecalho": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cabecalho
+         * @description Áreas de interesse (subgrupos de Graduação) e link de cadastro do Processo Seletivo. Não exige login.
+         */
+        get: operations["cabecalho_api_v1_publico_cabecalho_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/recursos": {
         parameters: {
             query?: never;
@@ -377,6 +417,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AreaInteresse */
+        AreaInteresse: {
+            /** Nome */
+            nome: string;
+            /** Itens */
+            itens: components["schemas"]["LinkLegado"][];
+        };
         /** Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post */
         Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post: {
             /** Arquivo */
@@ -386,6 +433,13 @@ export interface components {
              * @description JSON de OcrResultado produzido no navegador
              */
             ocr?: string | null;
+        };
+        /** Cabecalho */
+        Cabecalho: {
+            /** Areas */
+            areas: components["schemas"]["AreaInteresse"][];
+            /** Cadastrourl */
+            cadastroUrl: string;
         };
         /** Candidato */
         Candidato: {
@@ -671,6 +725,13 @@ export interface components {
              */
             acoes: ("matricular" | "continuar_matricula" | "contrato" | "documentos")[];
         };
+        /** LinkLegado */
+        LinkLegado: {
+            /** Nome */
+            nome: string;
+            /** Url */
+            url: string;
+        };
         /** LoginIn */
         LoginIn: {
             /**
@@ -837,6 +898,19 @@ export interface components {
             /** Url */
             url?: string | null;
         };
+        /** RecuperarSenhaIn */
+        RecuperarSenhaIn: {
+            /**
+             * Login
+             * @description E-mail, CPF, RG ou passaporte cadastrado
+             */
+            login: string;
+        };
+        /** RecuperarSenhaResultado */
+        RecuperarSenhaResultado: {
+            /** Mensagem */
+            mensagem: string;
+        };
         /** Responsavel */
         Responsavel: {
             /**
@@ -965,6 +1039,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Pessoa"];
+                };
+            };
+        };
+    };
+    recuperar_senha_api_v1_auth_recuperar_senha_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecuperarSenhaIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecuperarSenhaResultado"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1469,6 +1576,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Questionario"][];
+                };
+            };
+        };
+    };
+    cabecalho_api_v1_publico_cabecalho_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Cabecalho"];
                 };
             };
         };

@@ -25,6 +25,24 @@ test("fluxo completo de matrícula (dublê do Lyceum)", async ({ page }) => {
   // login
   await page.goto("/");
   await expect(page).toHaveURL(/\/login/);
+
+  // cabeçalho: área de interesse (subgrupos do Processo Seletivo) e cadastre-se; "entrar" fica só no card
+  await page.getByRole("button", { name: "Área de interesse" }).click();
+  await expect(page.getByRole("link", { name: "Enem" })).toHaveAttribute("href", /\/processo-seletivo\/subgrupo\?id=16$/);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("link", { name: "Enem" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Cadastre-se" })).toHaveAttribute("href", /\/cadastro\?et=4$/);
+
+  // esqueci minha senha: o Processo Seletivo envia as instruções
+  await page.getByRole("button", { name: "Esqueci minha senha" }).click();
+  await page.getByLabel("E-mail, CPF, RG ou passaporte").fill("000.000.000-00");
+  await page.getByRole("button", { name: "Enviar instruções" }).click();
+  await expect(page.getByRole("alert")).toContainText("Login não encontrado.");
+  await page.getByLabel("E-mail, CPF, RG ou passaporte").fill("123.456.789-09");
+  await page.getByRole("button", { name: "Enviar instruções" }).click();
+  await expect(page.getByText("Enviamos as instruções para o e-mail an***@exemplo.com.")).toBeVisible();
+  await page.getByRole("button", { name: "Voltar para entrar" }).click();
+
   await page.getByLabel("E-mail ou CPF").fill("123.456.789-09");
   await page.getByLabel("Senha").fill("errada");
   await page.getByRole("button", { name: "Entrar" }).click();

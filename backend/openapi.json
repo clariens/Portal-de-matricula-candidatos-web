@@ -81,6 +81,48 @@
         }
       }
     },
+    "/api/v1/auth/recuperar-senha": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Recuperar Senha",
+        "description": "Esqueci minha senha: o Processo Seletivo envia as instruções ao e-mail cadastrado.",
+        "operationId": "recuperar_senha_api_v1_auth_recuperar_senha_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecuperarSenhaIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecuperarSenhaResultado"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/enderecos/ufs": {
       "get": {
         "tags": [
@@ -807,6 +849,28 @@
         }
       }
     },
+    "/api/v1/publico/cabecalho": {
+      "get": {
+        "tags": [
+          "publico"
+        ],
+        "summary": "Cabecalho",
+        "description": "Áreas de interesse (subgrupos de Graduação) e link de cadastro do Processo Seletivo. Não exige login.",
+        "operationId": "cabecalho_api_v1_publico_cabecalho_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Cabecalho"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/recursos": {
       "get": {
         "tags": [
@@ -849,6 +913,27 @@
   },
   "components": {
     "schemas": {
+      "AreaInteresse": {
+        "properties": {
+          "nome": {
+            "type": "string",
+            "title": "Nome"
+          },
+          "itens": {
+            "items": {
+              "$ref": "#/components/schemas/LinkLegado"
+            },
+            "type": "array",
+            "title": "Itens"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nome",
+          "itens"
+        ],
+        "title": "AreaInteresse"
+      },
       "Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post": {
         "properties": {
           "arquivo": {
@@ -874,6 +959,27 @@
           "arquivo"
         ],
         "title": "Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"
+      },
+      "Cabecalho": {
+        "properties": {
+          "areas": {
+            "items": {
+              "$ref": "#/components/schemas/AreaInteresse"
+            },
+            "type": "array",
+            "title": "Areas"
+          },
+          "cadastroUrl": {
+            "type": "string",
+            "title": "Cadastrourl"
+          }
+        },
+        "type": "object",
+        "required": [
+          "areas",
+          "cadastroUrl"
+        ],
+        "title": "Cabecalho"
       },
       "Candidato": {
         "properties": {
@@ -1806,6 +1912,24 @@
         ],
         "title": "Inscricao"
       },
+      "LinkLegado": {
+        "properties": {
+          "nome": {
+            "type": "string",
+            "title": "Nome"
+          },
+          "url": {
+            "type": "string",
+            "title": "Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nome",
+          "url"
+        ],
+        "title": "LinkLegado"
+      },
       "LoginIn": {
         "properties": {
           "login": {
@@ -2297,6 +2421,35 @@
           "titulo"
         ],
         "title": "Questionario"
+      },
+      "RecuperarSenhaIn": {
+        "properties": {
+          "login": {
+            "type": "string",
+            "maxLength": 120,
+            "minLength": 3,
+            "title": "Login",
+            "description": "E-mail, CPF, RG ou passaporte cadastrado"
+          }
+        },
+        "type": "object",
+        "required": [
+          "login"
+        ],
+        "title": "RecuperarSenhaIn"
+      },
+      "RecuperarSenhaResultado": {
+        "properties": {
+          "mensagem": {
+            "type": "string",
+            "title": "Mensagem"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mensagem"
+        ],
+        "title": "RecuperarSenhaResultado"
       },
       "Responsavel": {
         "properties": {

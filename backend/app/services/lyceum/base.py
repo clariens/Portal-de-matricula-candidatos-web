@@ -15,6 +15,7 @@ from app.schemas.documento import Anexo, DocumentoStatus, EnvioDocumentosResulta
 from app.schemas.inscricao import Inscricao
 from app.schemas.matricula import ConfirmacaoResultado, Matricula, Questionario
 from app.schemas.pagamento import CupomResultado, OpcoesPagamento, PagamentoIn, PagamentoResultado
+from app.schemas.publico import Cabecalho
 
 
 class LyceumGateway(Protocol):
@@ -62,6 +63,10 @@ class LyceumGateway(Protocol):
     async def questionarios_pendentes(self, cod_pessoa: str) -> list[Questionario]: ...
 
     async def ping(self) -> bool: ...
+
+    # telas públicas (sem login)
+    async def cabecalho(self) -> Cabecalho: ...
+    async def recuperar_senha(self, login: str) -> str: ...
 
     # encerra recursos da sessão atual (ex.: sessão do candidato no portal legado)
     async def sair(self) -> None: ...

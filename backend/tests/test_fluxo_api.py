@@ -177,7 +177,14 @@ def test_fluxo_completo(logged):
 def test_logout(logged):
     r = logged.post("/api/v1/auth/logout", headers=H)
     assert r.status_code == 204
-    assert logged.get("/api/v1/me").status_code == 401
+    me = logged.get("/api/v1/me")
+    assert me.status_code == 200 and me.json() is None  # sem sessão: não é erro
+    assert logged.get("/api/v1/inscricoes").status_code == 401  # rotas protegidas continuam 401
+
+
+def test_me_sem_login_nao_e_erro(client):
+    r = client.get("/api/v1/me")
+    assert r.status_code == 200 and r.json() is None
 
 
 def test_documento_de_tipo_errado_nao_anexa(logged):

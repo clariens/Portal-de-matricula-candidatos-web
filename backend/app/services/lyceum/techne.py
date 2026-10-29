@@ -168,6 +168,17 @@ class TechneGateway:
         if self._usa_legado:
             await self.legado.logout(sessao_atual.get())
 
+    async def cabecalho(self):
+        if not self.s.lyceum_legado_base_url:
+            raise NaoConfigurado("LYCEUM_LEGADO_BASE_URL")
+        return await self.legado.cabecalho()
+
+    async def recuperar_senha(self, login: str) -> str:
+        # Recuperação de senha do candidato: só existe no Processo Seletivo (legado)
+        if not self.s.lyceum_legado_base_url:
+            raise NaoConfigurado("LYCEUM_LEGADO_BASE_URL")
+        return await self.legado.recuperar_senha(login)
+
     async def _autenticar_aluno(self, login: str, senha: str) -> Pessoa:
         """POST /v2/pessoas/autenticacao — aceita só ALUNO (RA); candidato sem RA é recusado."""
         try:

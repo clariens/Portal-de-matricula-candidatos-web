@@ -4,6 +4,24 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
 
 ## [Não lançado]
 ### Adicionado
+- **Cabeçalho com "Área de interesse"** (Graduação → Vestibular Tradicional, Transferência Externa, Enem,
+  Segunda Graduação, Tradicional Catalão) e **"Cadastre-se"** à direita para quem não entrou. Os dados vêm do
+  cabeçalho do Processo Seletivo (`GET /api/v1/publico/cabecalho`), com os subgrupos conhecidos se o legado
+  estiver fora. Mapeamento em `docs/cabecalho-processo-seletivo.md`.
+- **Esqueci minha senha** funcionando no card de login (`POST /api/v1/auth/recuperar-senha`), pelo mesmo fluxo do
+  `/recuperarsenha` do legado: o Processo Seletivo envia as instruções ao e-mail cadastrado.
+- Logo "Clariens Educação" centralizado no card de login, sem o subtítulo "Área do candidato". No cabeçalho, o
+  logo sozinho substitui "Clariens Educação · Medicina".
+- **Monitor cardíaco** na apresentação do login: linha vermelha desenhada, um sinal brilhante percorrendo o traçado
+  em loop e um coração batendo em dois tempos com anel pulsando. Fica parado com `prefers-reduced-motion`.
+
+### Corrigido (login)
+- O menu "Área de interesse" demorava até 20 s para aparecer com o Processo Seletivo fora: agora desiste em 4 s,
+  guarda a lista de reserva por 2 min e mostra o botão (carregando) desde o início.
+- `GET /api/v1/me` sem sessão responde 200 com `null` em vez de 401. Abrir o site não mostra mais erro no console;
+  as rotas protegidas continuam com 401.
+- Processo Seletivo fora do ar (502 do proxy ou sem conexão): o login e a recuperação de senha mostram "O Processo
+  Seletivo está fora do ar no momento. Tente novamente em alguns minutos." em vez de "Resposta inválida".
 - **Preparação para a Vercel** (homologação interna): `vercel.json` com Services (`front` Vite + `bff`
   FastAPI no mesmo domínio), `.vercelignore` (nunca envia `backend/.env`) e `backend/.python-version`.
 - **Backend sem estado entre requisições e sem banco** (a instituição não usa Redis):

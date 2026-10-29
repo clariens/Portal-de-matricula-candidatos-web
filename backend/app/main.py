@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import auth, enderecos, inscricoes
+from app.api import auth, enderecos, inscricoes, publico
 from app.config import get_settings
 from app.core.errors import PortalError, portal_error_handler, validation_error_handler
 from app.core.http import TLS_CONTEXT
@@ -100,7 +100,7 @@ app.add_middleware(
 app.add_middleware(SessaoLegadoNoCookie)
 
 api_deps = [Depends(require_csrf)]
-for r in (auth.router, enderecos.router, inscricoes.router):
+for r in (auth.router, enderecos.router, inscricoes.router, publico.router):
     app.include_router(r, prefix="/api/v1", dependencies=api_deps)
 
 

@@ -295,3 +295,13 @@ class FakeLyceum:
 
     async def sair(self) -> None:
         return None
+
+    async def cabecalho(self):
+        from app.services.lyceum.legado import cabecalho_padrao
+
+        return cabecalho_padrao("https://legado.exemplo/processo-seletivo")
+
+    async def recuperar_senha(self, login: str) -> str:
+        if digits(login) == digits(PESSOA.login) or login == PESSOA.email:
+            return "Enviamos as instruções para o e-mail an***@exemplo.com."
+        raise PortalError(422, "Login não encontrado.")

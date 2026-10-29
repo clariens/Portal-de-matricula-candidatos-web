@@ -3,6 +3,7 @@ import type { components } from "./schema";
 
 type S = components["schemas"];
 export type Pessoa = S["Pessoa"];
+export type Cabecalho = S["Cabecalho"];
 export type Inscricao = S["Inscricao"];
 export type Etapa = NonNullable<Inscricao["etapaAtual"]>;
 export type Candidato = S["Candidato"];

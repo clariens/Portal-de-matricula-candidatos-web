@@ -1,4 +1,5 @@
 import type {
+  Cabecalho,
   Candidato,
   CandidatoUpdate,
   CepResultado,
@@ -89,7 +90,12 @@ const ins = (id: string) => `/inscricoes/${encodeURIComponent(id)}`;
 export const api = {
   login: (login: string, senha: string) => request<Pessoa>("POST", "/auth/login", { login, senha }),
   logout: () => request<null>("POST", "/auth/logout"),
-  me: () => request<Pessoa>("GET", "/me"),
+  /** Esqueci minha senha: o Processo Seletivo envia as instruções ao e-mail cadastrado. */
+  recuperarSenha: (login: string) => request<{ mensagem: string }>("POST", "/auth/recuperar-senha", { login }),
+  /** Áreas de interesse e link de cadastro do Processo Seletivo (público). */
+  cabecalho: () => request<Cabecalho>("GET", "/publico/cabecalho"),
+  /** Quem está logado; null quando ninguém entrou (não é erro). */
+  me: () => request<Pessoa | null>("GET", "/me"),
   /** Recursos ligados no ambiente: conferência de documentos pela IA (servidor) ou pelo navegador. */
   recursos: () => request<{ conferenciaDocumentos: "ia" | "navegador" }>("GET", "/recursos"),
 
