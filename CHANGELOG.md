@@ -3,6 +3,14 @@
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
+### Adicionado
+- **Preparação para a Vercel** (homologação interna): `vercel.json` com Services (`front` Vite + `bff`
+  FastAPI no mesmo domínio), `.vercelignore` (nunca envia `backend/.env`) e `backend/.python-version`.
+- **Estado compartilhado entre instâncias** (`app/services/estado.py` + middleware `EstadoCompartilhado`).
+  Com `REDIS_URL`, a sessão do legado, os anexos (um campo por documento) e a etapa do wizard vão para o Redis.
+  Sem Redis, tudo continua em memória. Relógios de sessão e cache passaram de `monotonic` para `time.time`,
+  porque o monotônico não vale entre máquinas. Testes simulam várias instâncias e uploads simultâneos.
+
 ### Corrigido
 - **Documento novo depois do primeiro envio não chegava ao Lyceum** (visto em DEV, 29/10/2026). Depois do primeiro
   envio, o legado responde 200 a `POST /r/uploadDocumentosPorProcesso` e não grava nada, e o portal dizia

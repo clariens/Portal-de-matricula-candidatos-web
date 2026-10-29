@@ -255,3 +255,34 @@ def test_sem_configuracao_do_lyceum_o_servidor_nao_inicia():
 
     with pytest.raises(RuntimeError, match="LYCEUM_API_BASE_URL"):
         build_gateway(Settings(_env_file=None), httpx.AsyncClient())
+
+
+@respx.mock
+def test_api_com_estado_compartilhado_sobrevive_a_troca_de_instancia():
+    """Com Redis (aqui um armazenamento em memória), a instância não guarda nada entre requisições:
+    o login grava a sessão do legado no armazenamento e a requisição seguinte a recupera de lá."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from app.services.estado import MemoriaKV
+    from app.services.lyceum.legado import SessoesLegado
+    from tests.conftest import H
+
+    _mock_legado()
+    respx.get(f"{BASE}/v2/pessoas/idPessoa/100001/obterPessoa").mock(
+        return_value=httpx.Response(200, json={"data": {"pessoa": 100001, "nome_compl": "C"}}))
+    kv = MemoriaKV()
+    anterior = app.state.gateway_factory
+    app.state.gateway_factory = lambda s, c: TechneGateway(_legado(), c, SessoesLegado(kv))
+    try:
+        with TestClient(app) as tc:
+            assert tc.post("/api/v1/auth/login", json={"login": "52998224725", "senha": "s"}, headers=H).status_code == 200
+            sessoes = app.state.gateway.legado.sessoes
+            assert sessoes._s == {} and any(k.startswith("portal:legado:") for k in kv._d)  # só no armazenamento
+            respx.get(f"{LEG}/r/historico").mock(return_value=httpx.Response(200, text=HISTORICO_HTML))
+            r = tc.get("/api/v1/inscricoes", headers=H)
+            assert r.status_code == 200 and len(r.json()) == 3
+            assert tc.post("/api/v1/auth/logout", headers=H).status_code in (200, 204)
+            assert not any(k.startswith("portal:legado:") for k in kv._d)
+    finally:
+        app.state.gateway_factory = anterior

@@ -40,11 +40,13 @@ Produção com mais de uma instância do BFF: trocar o dicionário em memória p
 
 import base64
 import html
+import json
 import logging
 import re
 import secrets
 import time
 import unicodedata
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 
 import httpx
@@ -64,6 +66,7 @@ from app.schemas.pagamento import (
     PagamentoResultado,
     Plano,
 )
+from app.services.estado import KV
 from app.services.imagens import preparar_imagem
 from app.services.lyceum.catalogo import REGRA_POR_TIPO, TIPOS_DOCUMENTO
 from app.services.lyceum.mappers import normalizar_situacao
@@ -109,29 +112,158 @@ class Anexo:
     em: str
 
 
-class SessoesLegado:
+class _Requisicao:
+    """O que uma requisição tocou nas sessões (para salvar no fim) e o que ela carregou (para liberar)."""
+
     def __init__(self) -> None:
+        self.tocados: set[str] = set()
+        self.carregados: list[str] = []
+
+
+_requisicao: ContextVar[_Requisicao | None] = ContextVar("requisicao_legado", default=None)
+
+
+class SessoesLegado:
+    """Sessões do legado por `sid`. Sem `kv`, só em memória (um processo). Com `kv` (Redis na Vercel), cada
+    requisição carrega a sessão no início e salva antes de responder (`iniciar`/`carregar`/`concluir`, chamados
+    pelo middleware em app/main.py); os anexos ficam num hash à parte, um campo por documento, para que
+    uploads simultâneos de documentos diferentes não se sobrescrevam."""
+
+    def __init__(self, kv: KV | None = None) -> None:
+        self.kv = kv
         self._s: dict[str, _Sessao] = {}
+        self._em_uso: dict[str, int] = {}  # requisições em andamento por sid nesta instância
+        self._snap: dict[str, dict[str, Anexo]] = {}  # anexos como estavam no Redis ao carregar
+        self._removidos: set[str] = set()
+
+    def _tocar(self, sid: str | None) -> None:
+        req = _requisicao.get()
+        if req is not None and sid:
+            req.tocados.add(sid)
 
     def criar(self, sid: str, cookies: httpx.Cookies) -> None:
         self._limpar()
-        self._s[sid] = _Sessao(cookies=cookies, expira=time.monotonic() + SESSAO_TTL)
+        self._s[sid] = _Sessao(cookies=cookies, expira=time.time() + SESSAO_TTL)
+        self._removidos.discard(sid)
+        self._tocar(sid)
 
     def obter(self, sid: str | None) -> _Sessao:
         s = self._s.get(sid or "")
-        if not s or s.expira < time.monotonic():
+        if not s or s.expira < time.time():
             self._s.pop(sid or "", None)
             raise SessaoLegadoExpirada()
-        s.expira = time.monotonic() + SESSAO_TTL
+        s.expira = time.time() + SESSAO_TTL
+        self._tocar(sid)
         return s
 
     def remover(self, sid: str | None) -> _Sessao | None:
+        if sid and self.kv:
+            self._removidos.add(sid)
+            self._tocar(sid)
         return self._s.pop(sid or "", None)
 
     def _limpar(self) -> None:
-        agora = time.monotonic()
+        agora = time.time()
         for k in [k for k, v in self._s.items() if v.expira < agora]:
             self._s.pop(k, None)
+
+    # ---------- persistência entre instâncias (só com kv) ----------
+    def iniciar(self) -> _Requisicao:
+        req = _Requisicao()
+        _requisicao.set(req)
+        return req
+
+    async def carregar(self, req: _Requisicao, sid: str) -> None:
+        if not self.kv:
+            return
+        req.carregados.append(sid)
+        self._em_uso[sid] = self._em_uso.get(sid, 0) + 1
+        if self._em_uso[sid] > 1 and sid in self._s:
+            return  # outra requisição desta instância já carregou e está usando
+        bruto = await self.kv.get(_chave(sid))
+        if not bruto:
+            self._s.pop(sid, None)
+            return
+        s = _sessao_de_json(json.loads(bruto))
+        anexos = {campo: _anexo_de_json(json.loads(v)) for campo, v in (await self.kv.hgetall(_chave_anexos(sid))).items()}
+        for campo, a in anexos.items():
+            cand, tipo = campo.split("|", 1)
+            s.anexos.setdefault(cand, {})[tipo] = a
+        self._s[sid] = s
+        self._snap[sid] = anexos
+
+    async def concluir(self, req: _Requisicao) -> None:
+        if not self.kv:
+            return
+        try:
+            for sid in req.tocados:
+                await self._salvar(sid)
+        finally:
+            for sid in req.carregados:
+                self._em_uso[sid] = self._em_uso.get(sid, 1) - 1
+            for sid in set(req.carregados) | req.tocados:
+                if self._em_uso.get(sid, 0) <= 0:  # ninguém mais usando: a próxima requisição relê do Redis
+                    self._em_uso.pop(sid, None)
+                    self._s.pop(sid, None)
+                    self._snap.pop(sid, None)
+                    self._removidos.discard(sid)
+
+    async def _salvar(self, sid: str) -> None:
+        s = self._s.get(sid)
+        if sid in self._removidos or not s:
+            await self.kv.delete(_chave(sid), _chave_anexos(sid))
+            return
+        await self.kv.set(_chave(sid), json.dumps(_sessao_para_json(s)).encode(), SESSAO_TTL)
+        atuais = {f"{cand}|{tipo}": a for cand, docs in s.anexos.items() for tipo, a in docs.items()}
+        antes = self._snap.get(sid, {})
+        for campo, a in atuais.items():
+            if antes.get(campo) is not a:
+                await self.kv.hset(_chave_anexos(sid), campo, json.dumps(_anexo_para_json(a)).encode(), SESSAO_TTL)
+        sumiram = [c for c in antes if c not in atuais]
+        if sumiram:
+            await self.kv.hdel(_chave_anexos(sid), *sumiram)
+        self._snap[sid] = atuais
+
+
+def _chave(sid: str) -> str:
+    return f"portal:legado:{sid}"
+
+
+def _chave_anexos(sid: str) -> str:
+    return f"portal:anexos:{sid}"
+
+
+def _sessao_para_json(s: _Sessao) -> dict:
+    return {
+        "cookies": [[c.name, c.value, c.domain, c.path] for c in s.cookies.jar],
+        "expira": s.expira,
+        "historico": [s.historico[0], [i.model_dump(mode="json") for i in s.historico[1]]] if s.historico else None,
+        "etapas": s.etapas,
+        "tipos": ([s.tipos_documento[0], [t.model_dump(mode="json") for t in s.tipos_documento[1]]]
+                  if s.tipos_documento else None),
+    }
+
+
+def _sessao_de_json(d: dict) -> _Sessao:
+    cookies = httpx.Cookies()
+    for nome, valor, dominio, caminho in d["cookies"]:
+        cookies.set(nome, valor, domain=dominio, path=caminho)
+    h, t = d.get("historico"), d.get("tipos")
+    return _Sessao(
+        cookies=cookies, expira=d["expira"], etapas=d.get("etapas") or {},
+        historico=(h[0], [Inscricao.model_validate(i) for i in h[1]]) if h else None,
+        tipos_documento=(t[0], [TipoDocumento.model_validate(x) for x in t[1]]) if t else None,
+    )
+
+
+def _anexo_para_json(a: Anexo) -> dict:
+    return {"nome": a.nome, "mime": a.mime, "em": a.em, "conteudo": base64.b64encode(a.conteudo).decode(),
+            "ocr": a.ocr.model_dump(mode="json") if a.ocr else None}
+
+
+def _anexo_de_json(d: dict) -> Anexo:
+    return Anexo(nome=d["nome"], mime=d["mime"], em=d["em"], conteudo=base64.b64decode(d["conteudo"]),
+                 ocr=OcrResultado.model_validate(d["ocr"]) if d.get("ocr") else None)
 
 
 class ClienteLegado:
@@ -210,13 +342,13 @@ class ClienteLegado:
 
     async def historico(self, sid: str | None) -> list[Inscricao]:
         s = self.sessoes.obter(sid)
-        if s.historico and time.monotonic() - s.historico[0] < CACHE_HISTORICO:
+        if s.historico and time.time() - s.historico[0] < CACHE_HISTORICO:
             return [self._com_etapa(s, i) for i in s.historico[1]]
         r = await self.get(sid, "/r/historico")
         if r.status_code != 200:
             raise LyceumIndisponivel("Não foi possível carregar suas inscrições")
         itens = parse_historico(r.text)
-        s.historico = (time.monotonic(), itens)
+        s.historico = (time.time(), itens)
         return [self._com_etapa(s, i) for i in itens]
 
     @staticmethod
@@ -389,14 +521,14 @@ class ClienteLegado:
     async def documentos_exigidos(self, sid: str | None) -> list[TipoDocumento]:
         """Lista de documentos do processo, lida da página real (muda por concurso). Cache curto por sessão."""
         s = self.sessoes.obter(sid)
-        if s.tipos_documento and time.monotonic() - s.tipos_documento[0] < CACHE_TIPOS_DOCUMENTO:
+        if s.tipos_documento and time.time() - s.tipos_documento[0] < CACHE_TIPOS_DOCUMENTO:
             return [t.model_copy(deep=True) for t in s.tipos_documento[1]]
         r = await self.get(sid, "/r/documentosPorProcesso")
         tipos = parse_documentos(r.text) if r.status_code == 200 else []
         if not tipos:
             # a página só abre depois de salvar os dados nesta sessão
             raise PortalError(409, "Confirme seus dados pessoais antes de enviar os documentos.")
-        s.tipos_documento = (time.monotonic(), tipos)
+        s.tipos_documento = (time.time(), tipos)
         return [t.model_copy(deep=True) for t in tipos]
 
     def _anexos(self, sid: str | None, cod_candidato: str) -> dict[str, Anexo]:

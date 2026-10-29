@@ -184,7 +184,7 @@ async def test_lista_de_documentos_em_cache_e_etapa_no_historico():
     insc = Inscricao(cod_candidato=CAND, cod_concurso="1363", data_inscricao="", processo="", curso="", unidade="",
                      situacao="Convocado", acoes=["matricular"])
     s = cl.sessoes.obter(SID)
-    s.historico = (__import__("time").monotonic(), [insc])  # cache quente
+    s.historico = (__import__("time").time(), [insc])  # cache quente
     (i,) = await cl.historico(SID)
     assert i.etapa_atual == "pagamento" and i.acoes == ["continuar_matricula"]
 

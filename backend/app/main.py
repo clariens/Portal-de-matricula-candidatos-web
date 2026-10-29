@@ -13,7 +13,7 @@ from app.api import auth, enderecos, inscricoes
 from app.config import get_settings
 from app.core.errors import PortalError, portal_error_handler, validation_error_handler
 from app.core.http import TLS_CONTEXT
-from app.core.session import require_csrf
+from app.core.session import ler_sessao, require_csrf
 from app.services.ia_documentos import LeitorDocumentos
 from app.services.lyceum import build_gateway
 
@@ -36,11 +36,44 @@ async def lifespan(app: FastAPI):
         app.state.leitor = LeitorDocumentos(s) if s.ia_documentos_ativa and s.anthropic_api_key else None
         app.state.tentativas_ia = {}
         logging.getLogger("portal").info(
-            "Portal iniciado | Lyceum %s (login: %s) | conferência de documentos: %s", s.lyceum_api_base_url or "-",
-            s.lyceum_auth_modo,
+            "Portal iniciado | Lyceum %s (login: %s) | estado: %s | conferência de documentos: %s",
+            s.lyceum_api_base_url or "-", s.lyceum_auth_modo, "Redis" if s.redis_url else "memória",
             f"IA ({s.ia_documentos_modelo}, teto US${s.ia_documentos_limite_diario_usd:.2f}/dia)" if app.state.leitor
             else "navegador (OCR local)")
         yield
+
+
+class EstadoCompartilhado:
+    """Com Redis (Vercel), carrega a sessão do legado do candidato no início da requisição e salva antes da
+    resposta sair: a próxima requisição pode cair em outra instância e precisa encontrar tudo lá."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        gw = getattr(scope["app"].state, "gateway", None) if scope["type"] == "http" else None
+        sessoes = getattr(getattr(gw, "legado", None), "sessoes", None)
+        if not sessoes or not sessoes.kv or not scope["path"].startswith("/api/"):
+            await self.app(scope, receive, send)
+            return
+        req = sessoes.iniciar()
+        user = ler_sessao(Request(scope), get_settings())
+        if user and user.sid:
+            await sessoes.carregar(req, user.sid)
+        salvo = False
+
+        async def enviar(msg):
+            nonlocal salvo
+            if msg["type"] == "http.response.start" and not salvo:
+                salvo = True
+                await sessoes.concluir(req)
+            await send(msg)
+
+        try:
+            await self.app(scope, receive, enviar)
+        finally:
+            if not salvo:
+                await sessoes.concluir(req)
 
 
 app = FastAPI(
@@ -59,6 +92,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type", "X-Requested-With"],
 )
+
+app.add_middleware(EstadoCompartilhado)
 
 api_deps = [Depends(require_csrf)]
 for r in (auth.router, enderecos.router, inscricoes.router):

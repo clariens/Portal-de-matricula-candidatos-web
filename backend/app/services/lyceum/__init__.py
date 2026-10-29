@@ -1,7 +1,9 @@
 import httpx
 
 from app.config import Settings
+from app.services.estado import criar_kv
 from app.services.lyceum.base import LyceumGateway
+from app.services.lyceum.legado import SessoesLegado
 from app.services.lyceum.techne import TechneGateway
 
 
@@ -16,7 +18,7 @@ def build_gateway(settings: Settings, client: httpx.AsyncClient) -> LyceumGatewa
     if faltando:
         # Falha ao iniciar, com o nome do que falta (ex.: servidor iniciado fora da pasta backend, sem ler o .env)
         raise RuntimeError(f"Configure no backend/.env: {', '.join(faltando)}")
-    return TechneGateway(settings, client)
+    return TechneGateway(settings, client, SessoesLegado(criar_kv(settings.redis_url)))
 
 
 __all__ = ["LyceumGateway", "TechneGateway", "build_gateway"]

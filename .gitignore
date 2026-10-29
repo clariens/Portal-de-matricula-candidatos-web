@@ -22,3 +22,8 @@ Thumbs.db
 *.log
 *.egg-info/
 *.tsbuildinfo
+
+# Vercel (vercel dev / vercel link)
+.vercel/
+backend/.vercel/
+backend/build/

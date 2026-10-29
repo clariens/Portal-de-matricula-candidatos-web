@@ -24,6 +24,32 @@ docker run -p 8000:8000 --env-file backend/.env portal-matricula
 - Repassar `X-Forwarded-*` (o uvicorn sobe com `--proxy-headers`).
 - Cache longo em `/assets/*` (nomes com hash) e em `/ocr/*`; sem cache no `index.html`.
 
+## Vercel (homologação interna)
+Um projeto só, com [Services](https://vercel.com/docs/services) (`vercel.json` na raiz):
+- `front`: `frontend/` (Vite), com fallback do SPA para `index.html`;
+- `bff`: `backend/` (FastAPI, `app.main:app`, Python 3.14, `maxDuration` 60 s);
+- `/api/*` vai para o `bff` com o caminho original; o resto vai para o `front`. É a mesma origem, então o cookie
+  da sessão funciona sem CORS.
+
+**Estado:** na Vercel cada requisição pode cair numa instância diferente. A sessão do legado (JSESSIONID), os
+anexos ainda não enviados e a etapa do wizard ficam no Redis (`REDIS_URL`, Upstash pelo Marketplace). O
+middleware `EstadoCompartilhado` (`app/main.py`) carrega a sessão no início da requisição e salva antes da
+resposta. Os anexos ficam num hash, um campo por documento, então uploads simultâneos não se sobrescrevem.
+Sem `REDIS_URL` tudo fica na memória do processo, o que só serve para desenvolvimento local.
+
+**Variáveis no projeto Vercel:** as mesmas do `backend/.env.example`, mais:
+- `REDIS_URL` (criada pela integração do Redis);
+- `PORTAL_SESSION_SECRET` novo, gerado para a Vercel, sem reaproveitar o local;
+- `PORTAL_COOKIE_SECURE=true`;
+- `PORTAL_UPLOAD_MAX_MB=4`: as funções da Vercel aceitam no máximo 4,5 MB por requisição.
+
+**Limites conhecidos:** 4,5 MB por requisição nas funções, o que basta para o DEV (o Lyceum aceita 1 MB). O
+contador de tentativas e o teto diário de gasto da IA ainda são por instância, então o teto efetivo pode
+multiplicar pelo número de instâncias. Fotos de RG passam pela Vercel, o que exige o aval de LGPD/IA CoE antes
+de produção.
+
+**Validar a configuração localmente:** `vercel dev -L` na raiz roda os dois serviços sem falar com a nuvem.
+
 ## Limites de tamanho do legado (Processo Seletivo)
 Medidos em DEV (`desenvolvimento-lyceum`) em 29/10/2026, com PDFs de teste em `POST /r/documentosCandidato/upload`.
 Recusa não grava nada.

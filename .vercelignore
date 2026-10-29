@@ -1,0 +1,17 @@
+# Nunca enviar segredos nem ambientes locais para a Vercel
+backend/.env
+**/.venv
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/*.egg-info
+frontend/dist
+frontend/public/ocr
+frontend/test-results
+frontend/playwright-report
+*.log
+.vercel
+backend/.vercel
+backend/build
