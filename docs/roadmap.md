@@ -8,7 +8,7 @@ Situação em 29/10/2026 e o que falta, em ordem de prioridade. O andamento item
 |---|---|
 | Login, histórico, recuperação de senha | ✅ funcionando (Processo Seletivo legado, na sessão do candidato) |
 | Etapa 1 · Dados | ✅ leitura e gravação reais (`/r/ingresso`, `atualizar.json`) |
-| Etapa 2 · Documentos | ✅ conferência por IA, primeiro envio em lote e envios seguintes um a um, confirmados em "Documentos Ingresso" |
+| Etapa 2 · Documentos | ✅ conferência por IA, envio um documento por chamada (o primeiro pela rota do form, os seguintes pela avulsa) com resultado e progresso por documento, confirmados em "Documentos Ingresso" |
 | Etapa 3 · Pagamento | ⚠ planos e cupom reais; confirmação **só em simulação** (`LYCEUM_PAGAMENTO_MODO=simular`) |
 | Etapa 4 · Conclusão | ❌ responde 501 contra o Lyceum real (só funciona no dublê dos testes) |
 | Cabeçalho: Área de interesse e Cadastre-se | ⚠ links para as **páginas do legado** (o portal ainda não tem as próprias) |

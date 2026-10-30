@@ -3,6 +3,8 @@
 Markup reduzido de /r/documentosPorProcesso observado em DEV (21/10/2026).
 """
 
+import re
+
 import httpx
 import pytest
 import respx
@@ -130,12 +132,11 @@ async def test_anexar_listar_remover():
 
 
 @respx.mock
-async def test_envio_exige_obrigatorios():
+async def test_envio_sem_anexo_e_409():
     cl = _cliente()
-    await _anexar(cl, "05", "cpf.pdf", PDF, "application/pdf", None)
     with pytest.raises(PortalError) as e:
-        await cl.enviar_documentos(SID, CAND, CONC, cl.anexos_teste, simular=True)
-    assert e.value.status == 409 and "Documento de Identidade" in e.value.mensagem
+        await cl.enviar_documentos(SID, CAND, CONC, {}, simular=False)
+    assert e.value.status == 409 and "Anexe um documento" in e.value.mensagem
 
 
 @respx.mock
@@ -152,20 +153,23 @@ async def test_envio_simulado_nao_chama_o_lyceum():
 
 
 @respx.mock
-async def test_envio_real_monta_multipart_igual_ao_form():
+async def test_primeiro_envio_vai_sozinho_pelo_form_do_legado():
+    """Primeiro documento da inscrição: rota do form frm-documentos, um campo por documento e só ele preenchido
+    (todos juntos passavam de 1 MiB e o nginx do DEV recusava o envio inteiro)."""
     cl = _cliente()
     upload = respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(
         return_value=httpx.Response(303, headers={"Location": "/processo-seletivo/r/pagamentoIngresso"}))
-    for c in ("03", "05", "04"):
-        await _anexar(cl, c, f"doc{c}.pdf", PDF, "application/pdf", None)
-    _lyceum_grava(upload, lambda: _tabela("03", "05", "04"))
+    await _anexar(cl, "05", "doc05.pdf", PDF, "application/pdf", None)
+    _lyceum_grava(upload, lambda: _tabela("05"))
     r = await cl.enviar_documentos(SID, CAND, CONC, cl.anexos_teste, simular=False)
-    assert not r.simulado and {d.codigo: d.status for d in r.documentos}["05"] == "enviado"
+    assert not r.simulado and r.mensagem == "Documentos enviados." and not r.recusados
+    assert {d.codigo: d.status for d in r.documentos}["05"] == "enviado"
     corpo = upload.calls.last.request.content
     assert upload.calls.last.request.headers["content-type"].startswith("multipart/form-data")
     for c in ("14", "03", "05", "04", "01"):  # um campo por documento da página, inclusive os vazios
         assert f'name="{c}"'.encode() in corpo
-    assert b'filename="doc05.pdf"' in corpo and b'name="14"; filename=""' in corpo
+    assert b'filename="doc05.pdf"' in corpo and corpo.count(b'filename=""') == 4
+    assert cl.sessoes.obter(SID).etapas.get(CAND) != "pagamento"  # ainda faltam obrigatórios
 
 
 @respx.mock
@@ -173,11 +177,11 @@ async def test_envio_real_recusado_pelo_lyceum():
     cl = _cliente()
     respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(
         return_value=httpx.Response(500, headers={"mensagem": "Documento excede o tamanho"}))
-    for c in ("03", "05", "04"):
-        await _anexar(cl, c, f"{c}.pdf", PDF, "application/pdf", None)
+    await _anexar(cl, "05", "05.pdf", PDF, "application/pdf", None)
     with pytest.raises(PortalError) as e:
         await cl.enviar_documentos(SID, CAND, CONC, cl.anexos_teste, simular=False)
-    assert e.value.status == 422 and e.value.mensagem == "Documento excede o tamanho"
+    assert e.value.status == 422 and e.value.mensagem.startswith("CPF não foi enviado.")
+    assert set(e.value.campos) == {"05"} and "Documento excede o tamanho" in e.value.campos["05"]
 
 
 @respx.mock
@@ -204,24 +208,27 @@ async def test_envio_real_200_confirmado_em_documentos_ingresso():
     """Legado devolve 200 (não redireciona): vale o que aparece em Documentos Ingresso."""
     cl = _cliente()
     upload = respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=httpx.Response(200, text="ok"))
-    for c in ("03", "05", "04"):
-        await _anexar(cl, c, f"{c}.pdf", PDF, "application/pdf", None)
-    _lyceum_grava(upload, lambda: _tabela("03", "05", "04"))
+    await _anexar(cl, "03", "03.pdf", PDF, "application/pdf", None)
+    _lyceum_grava(upload, lambda: _tabela("03"))
     r = await cl.enviar_documentos(SID, CAND, CONC, cl.anexos_teste, simular=False)
     assert not r.simulado and r.mensagem == "Documentos enviados."
-    assert cl.sessoes.obter(SID).etapas[CAND] == "pagamento"
 
 
 @respx.mock
 async def test_envio_real_200_sem_gravar_e_erro():
-    """Visto em DEV (29/10/2026): o legado responde 200 e não grava nada. Não pode virar "enviado"."""
+    """Visto em DEV (29/10/2026): o legado responde 200 e não grava nada. Não pode virar "enviado", e o portal não
+    tenta o primeiro envio de novo com os outros arquivos."""
     cl = _cliente()
-    respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=httpx.Response(200, text="<html></html>"))
+    lote = respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=httpx.Response(200, text="<html></html>"))
+    avulso = respx.post(f"{LEG}/r/documentosCandidato/upload").mock(return_value=httpx.Response(204))
     for c in ("03", "05", "04"):
         await _anexar(cl, c, f"{c}.pdf", PDF, "application/pdf", None)
     with pytest.raises(PortalError) as e:
         await cl.enviar_documentos(SID, CAND, CONC, cl.anexos_teste, simular=False)
-    assert "não registrou" in e.value.mensagem
+    assert lote.call_count == 1 and not avulso.called
+    assert "Nenhum documento foi enviado" in e.value.mensagem and set(e.value.campos) == {"03", "05", "04"}
+    assert "não registrou" in e.value.campos["03"]
+    assert all("primeiro documento não entrou" in e.value.campos[c] for c in ("05", "04"))
 
 
 @respx.mock
@@ -243,6 +250,41 @@ async def test_documento_novo_depois_do_primeiro_envio_vai_pela_rota_avulsa():
     assert b'name="14,Ingresso"; filename="vacina.pdf"' in campos[0] and b'name="01,Ingresso"' in campos[1]
     st = {d.codigo: d.status for d in r.documentos}
     assert st["14"] == "enviado" and st["01"] == "pendente" and "exceto: Foto 3X4" in r.mensagem
+    assert set(r.recusados) == {"01"}  # a tela marca só a foto para tentar de novo
+
+
+@respx.mock
+async def test_varios_na_mesma_chamada_primeiro_pelo_form_e_os_outros_um_a_um():
+    """Obrigatórios primeiro, do menor para o maior: o menor abre a etapa pelo form; cada um dos outros vai sozinho
+    e, se recusado, não derruba nada."""
+    cl = _cliente()
+    lote = respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=httpx.Response(302))
+    avulso = respx.post(f"{LEG}/r/documentosCandidato/upload").mock(
+        side_effect=lambda req: httpx.Response(413 if b'name="01,Ingresso"' in req.content else 204))
+    for c, extra in (("03", 300), ("05", 0), ("04", 100), ("14", 0), ("01", 0)):
+        await _anexar(cl, c, f"doc{c}.pdf", PDF + b"0" * extra, "application/pdf", None)
+    _lyceum_grava(lote, lambda: _tabela("05", *(["04", "03", "14"] if avulso.called else [])))
+    r = await cl.enviar_documentos(SID, CAND, CONC, cl.anexos_teste, simular=False)
+    corpo = lote.calls.last.request.content
+    assert lote.call_count == 1 and b'filename="doc05.pdf"' in corpo and corpo.count(b'filename=""') == 4
+    ordem = [re.search(rb'name="(\d+),Ingresso"', c.request.content)[1].decode() for c in avulso.calls]
+    assert ordem == ["04", "03", "14", "01"]
+    st = {d.codigo: d.status for d in r.documentos}
+    assert st["05"] == st["04"] == st["03"] == st["14"] == "enviado" and st["01"] == "pendente"
+    assert set(r.recusados) == {"01"} and "maior que o limite do Lyceum" in r.recusados["01"]
+    assert r.mensagem.startswith("Documentos enviados, exceto: Foto")
+    assert cl.sessoes.obter(SID).etapas[CAND] == "pagamento"  # os obrigatórios entraram
+
+
+@respx.mock
+async def test_documento_novo_grande_demais_diz_qual_e():
+    cl = _cliente(entregues=ENTREGUES_HTML)
+    respx.post(f"{LEG}/r/documentosCandidato/upload").mock(return_value=httpx.Response(413))
+    await _anexar(cl, "14", "vacina.pdf", PDF, "application/pdf", None)
+    with pytest.raises(PortalError) as e:
+        await cl.enviar_documentos(SID, CAND, CONC, cl.anexos_teste, simular=False)
+    assert "Vacina" in e.value.mensagem and "maior que o limite do Lyceum" in e.value.mensagem
+    assert set(e.value.campos) == {"14"}
 
 
 @respx.mock
@@ -321,33 +363,32 @@ async def test_pdf_acima_do_limite_por_arquivo_e_recusado_no_anexo():
 
 
 @respx.mock
-async def test_total_acima_do_limite_nao_chega_a_enviar():
+async def test_arquivo_acima_do_limite_por_envio_nao_chega_a_enviar():
     s = SessoesLegado()
     s.criar(SID, httpx.Cookies())
     respx.get(f"{LEG}/r/documentosPorProcesso").mock(return_value=httpx.Response(200, text=DOCS_HTML))
     respx.route(method="GET", url__startswith=f"{LEG}/r/documentosPorProcessoCandidato").mock(
         return_value=httpx.Response(200, text=NENHUM_ENTREGUE))
-    cl = ClienteLegado(LEG, 5, s, max_kb_arquivo=1024, max_kb_total=2048)
+    cl = ClienteLegado(LEG, 5, s, max_kb_arquivo=2048, max_kb_total=1000)
     cl.anexos_teste = {}
     upload = respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=httpx.Response(302))
-    pdf = b"%PDF-1.4" + b"0" * (900 * 1024)
-    for c in ("03", "05", "04"):
-        await _anexar(cl, c, f"{c}.pdf", pdf, "application/pdf", None)
+    await _anexar(cl, "03", "03.pdf", b"%PDF-1.4" + b"0" * (1100 * 1024), "application/pdf", None)
     with pytest.raises(PortalError) as e:
         await cl.enviar_documentos(SID, CAND, CONC, cl.anexos_teste, simular=False)
-    assert not upload.called and "limite por envio" in e.value.mensagem
+    assert not upload.called and set(e.value.campos) == {"03"}
+    assert "Arquivo de 1,1 MB" in e.value.campos["03"] and "1000 KB por envio" in e.value.campos["03"]
 
 
 @respx.mock
-@pytest.mark.parametrize("resposta,trecho", [
-    (httpx.Response(413, text="<title>413 Request Entity Too Large</title>"), "limite de tamanho do Lyceum"),
-    (httpx.Response(500, text="<title>Erro</title>FileSizeLimitExceededException: ..."), "limite por arquivo"),
+@pytest.mark.parametrize("resposta", [
+    httpx.Response(413, text="<title>413 Request Entity Too Large</title>"),
+    httpx.Response(500, text="<title>Erro</title>FileSizeLimitExceededException: ..."),
 ])
-async def test_erros_de_tamanho_do_legado_viram_mensagens_claras(resposta, trecho):
+async def test_erros_de_tamanho_do_legado_viram_mensagens_claras(resposta):
     cl = _cliente()
     respx.post(f"{LEG}/r/uploadDocumentosPorProcesso").mock(return_value=resposta)
-    for c in ("03", "05", "04"):
-        await _anexar(cl, c, f"{c}.pdf", PDF, "application/pdf", None)
+    await _anexar(cl, "05", "05.pdf", PDF, "application/pdf", None)
     with pytest.raises(PortalError) as e:
         await cl.enviar_documentos(SID, CAND, CONC, cl.anexos_teste, simular=False)
-    assert e.value.status == 422 and trecho in e.value.mensagem
+    assert e.value.status == 422 and e.value.mensagem.startswith("CPF não foi enviado.")
+    assert "maior que o limite do Lyceum" in e.value.campos["05"]

@@ -23,7 +23,7 @@ function lerCobranca(id: string): PagamentoResultado["cobranca"] | null {
 }
 
 export function EtapaConclusao() {
-  const { insc, candidato } = useWizard();
+  const { insc, ref, candidato } = useWizard();
   const nav = useNavigate();
   const [m, setM] = useState<Matricula | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -32,13 +32,13 @@ export function EtapaConclusao() {
   const cobranca = lerCobranca(insc.codCandidato);
 
   useEffect(() => {
-    api.matricula(insc.codCandidato).then(setM).catch((e) => setErro(e instanceof ApiError ? e.message : "Erro ao carregar a matrícula."));
+    api.matricula(ref).then(setM).catch((e) => setErro(e instanceof ApiError ? e.message : "Erro ao carregar a matrícula."));
   }, [insc.codCandidato]);
 
   async function concluir() {
     setEnviando(true);
     try {
-      const r = await api.confirmarMatricula(insc.codCandidato);
+      const r = await api.confirmarMatricula(ref);
       if (r.questionariosPendentes?.length) setQuestionarios(r.questionariosPendentes);
       else nav("/inscricoes");
     } catch (e) {
@@ -152,7 +152,7 @@ export function EtapaConclusao() {
       )}
 
       <div className="foot">
-        <button className="btn btn-ghost" type="button" onClick={() => nav(`/matricula/${insc.codCandidato}/documentos`)}>
+        <button className="btn btn-ghost" type="button" onClick={() => nav(`/matricula/${ref}/documentos`)}>
           Ver documentos
         </button>
         {questionarios ? (

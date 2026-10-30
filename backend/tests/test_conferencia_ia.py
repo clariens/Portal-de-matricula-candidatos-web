@@ -7,7 +7,7 @@ from app.schemas.candidato import Candidato, Endereco
 from app.schemas.documento import TipoDocumento
 from app.services.conferencia import conferir
 from app.services.ia_documentos import IAIndisponivel, LeituraDocumento, ResultadoIA
-from tests.conftest import INSC, PDF, H
+from tests.conftest import PDF, H, ref
 
 CAND = Candidato(
     cod_candidato="1", cod_concurso="1", nome_completo="Ana Beatriz Rocha", data_nascimento="14/03/2004", sexo="F",
@@ -106,7 +106,7 @@ def com_ia(logged):
 
 def _upload(c, tipo="04", ocr_navegador=None):
     data = {"ocr": ocr_navegador} if ocr_navegador else {}
-    return c.post(f"/api/v1/inscricoes/{INSC}/documentos/{tipo}", files={"arquivo": ("rg.pdf", PDF, "application/pdf")},
+    return c.post(f"/api/v1/inscricoes/{ref(c)}/documentos/{tipo}", files={"arquivo": ("rg.pdf", PDF, "application/pdf")},
                   data=data, headers=H)
 
 
@@ -129,7 +129,7 @@ def test_documento_errado_nao_e_anexado(logged, com_ia):
     com_ia(LeitorFalso(leitura(tipo_documento="05", tipo_descricao="Cartão do CPF")))
     j = _upload(logged).json()
     assert j["status"] == "pendente" and j["analise"]["veredito"] == "tipo_errado"
-    docs = {d["codigo"]: d["status"] for d in logged.get(f"/api/v1/inscricoes/{INSC}/documentos").json()}
+    docs = {d["codigo"]: d["status"] for d in logged.get(f"/api/v1/inscricoes/{ref(logged)}/documentos").json()}
     assert docs["04"] == "pendente"
 
 

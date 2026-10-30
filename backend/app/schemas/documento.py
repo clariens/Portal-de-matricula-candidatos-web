@@ -67,3 +67,5 @@ class EnvioDocumentosResultado(ApiModel):
     simulado: bool
     mensagem: str
     documentos: list[DocumentoStatus]
+    # documentos que não foram enviados (código → motivo); os demais seguiram normalmente
+    recusados: dict[str, str] = Field(default_factory=dict)

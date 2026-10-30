@@ -46,3 +46,10 @@ CANDIDATO_OK = {
 }
 
 PDF = b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
+
+
+def ref(c, cod=INSC):
+    """Referência opaca da inscrição, lida do histórico como o front faz (a URL não leva o número)."""
+    if "refs" not in c.__dict__:
+        c.__dict__["refs"] = {i["codCandidato"]: i["ref"] for i in c.get("/api/v1/inscricoes", headers=H).json()}
+    return c.__dict__["refs"][cod]

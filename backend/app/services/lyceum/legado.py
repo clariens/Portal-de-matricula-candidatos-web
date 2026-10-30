@@ -23,9 +23,12 @@ Contrato observado em DEV (20/10/2026):
   GET  /r/documentosPorProcesso → <form id="frm-documentos"> com um <input type=file name="{código}"> por
                            documento; obrigatórios têm `required` e "- Obrigatório" no título. Só abre DEPOIS
                            de um atualizar.json bem-sucedido na mesma sessão (antes: página "Ocorreu um erro").
-  POST /r/uploadDocumentosPorProcesso (multipart, todos os campos) → 302 /r/pagamentoIngresso (envio real em
-                           DEV em 22/10/2026). ATENÇÃO: depois do envio o legado continua mostrando o formulário;
-                           reenviar duplicaria os documentos. O portal consulta os enviados antes (abaixo).
+  POST /r/uploadDocumentosPorProcesso (multipart, um campo por documento) → 302 /r/pagamentoIngresso (envio real
+                           em DEV em 22/10/2026). O portal manda por aqui só o PRIMEIRO documento, sozinho (o nginx
+                           do DEV recusa requisições acima de 1 MiB). ATENÇÃO: depois do envio o legado continua
+                           mostrando o formulário; reenviar duplicaria os documentos. O portal consulta os enviados
+                           antes (abaixo).
+  POST /r/documentosCandidato/upload (multipart, campo "<código>,Ingresso") → 204: demais documentos, um por vez.
   GET  /r/pagamentoIngresso → <form id="frm-pagamento"> (só abre depois de dados → documentos NA MESMA sessão;
                            antes disso responde 302). Planos em <select id="planoPagamento"> com valor
                            "planoPadrao:codigoPlano:formaPagamento:numParcelas"; a página não informa valores.
@@ -599,128 +602,130 @@ class ClienteLegado:
                 conteudo, mime = menor, mime_menor
                 nome = nome.rsplit(".", 1)[0] + ".jpg"
         if len(conteudo) > self.max_arquivo:
-            raise PortalError(422, f"Este arquivo tem {_mb(len(conteudo))}; o limite do Lyceum é "
-                                   f"{_mb(self.max_arquivo)} por arquivo. Reduza o arquivo ou envie uma foto.",
+            raise PortalError(422, f"Este arquivo tem {_tam(len(conteudo))}; o limite do Lyceum é "
+                                   f"{_tam(self.max_arquivo)} por arquivo. Reduza o arquivo ou envie uma foto.",
                               {"arquivo": "Arquivo grande demais."})
         anexo = Anexo(nome=nome, conteudo=conteudo, mime=mime, ocr=ocr, em=time.strftime("%d/%m/%Y %H:%M"))
         return _status(t, anexo), anexo
 
     async def enviar_documentos(self, sid: str | None, cod_candidato: str, cod_concurso: str,
                                 anexos: dict[str, Anexo], simular: bool) -> EnvioDocumentosResultado:
-        """Monta o multipart igual ao form frm-documentos (um campo por documento; vazio quando não anexado).
+        """Envia ao Lyceum UM DOCUMENTO POR REQUISIÇÃO, com resultado por documento: o que der certo fica enviado e o
+        que for recusado volta em `recusados` (código → motivo), para o candidato trocar só aquele arquivo. O limite
+        de tamanho do Lyceum (1 MiB por requisição no DEV) passa a valer por arquivo, nunca pela soma.
+
+        O primeiro documento da inscrição vai por /r/uploadDocumentosPorProcesso (a rota do form frm-documentos, que
+        finaliza a etapa), sozinho, com os outros campos vazios. Os seguintes vão por /r/documentosCandidato/upload
+        (a tela "Documentos Ingresso"). O navegador manda um documento por chamada; quem garante os obrigatórios é a
+        tela (só envia com todos anexados) e o pagamento (só abre com todos entregues).
 
         simular=True: valida e registra, sem chamar o Lyceum (o POST real FINALIZA a inscrição).
         """
         tipos = await self.documentos_exigidos(sid)
-        anexos = dict(anexos)
         entregues = await self.documentos_entregues(sid, cod_candidato, cod_concurso)
-        for codigo in list(anexos):
-            if codigo in entregues:  # nunca reenviar o que o Lyceum já tem
-                anexos.pop(codigo)
-        if not anexos and entregues and all(t.codigo in entregues for t in tipos if t.obrigatorio):
-            self.avancar_etapa(sid, cod_candidato, "pagamento")
-            return EnvioDocumentosResultado(
-                simulado=False, mensagem="Seus documentos já foram enviados. Siga para o pagamento.",
-                documentos=await self.documentos(sid, cod_candidato, cod_concurso))
-        if entregues:
-            # Depois do primeiro envio o legado ignora /r/uploadDocumentosPorProcesso (responde 200 sem gravar):
-            # documentos novos vão um a um pela rota da tela "Documentos Ingresso".
-            return await self._enviar_avulsos(sid, cod_candidato, cod_concurso, tipos, anexos, simular)
-        faltando = [t.nome for t in tipos if t.obrigatorio and t.codigo not in anexos and t.codigo not in entregues]
-        if faltando:
-            raise PortalError(409, "Anexe os documentos obrigatórios: " + ", ".join(faltando) + ".")
-        files = [(t.codigo, (anexos[t.codigo].nome, anexos[t.codigo].conteudo, anexos[t.codigo].mime)
-                  if t.codigo in anexos else ("", b"", "application/octet-stream")) for t in tipos]
-        resumo = ", ".join(f"{t.codigo}={len(anexos[t.codigo].conteudo)}B" for t in tipos if t.codigo in anexos)
-        if simular:
-            log.warning("[lyceum-legado] SIMULAÇÃO POST /r/uploadDocumentosPorProcesso (não enviado): %s", resumo)
-            self.avancar_etapa(sid, cod_candidato, "pagamento")
-            return EnvioDocumentosResultado(
-                simulado=True,
-                mensagem="Envio simulado (ambiente de desenvolvimento): nada foi enviado ao Lyceum.",
-                documentos=[_status(t, anexos.get(t.codigo)) for t in tipos])
-
-        total = sum(len(a.conteudo) for a in anexos.values())
-        if total > self.max_total:
-            maiores = sorted(((len(anexos[t.codigo].conteudo), t.nome) for t in tipos if t.codigo in anexos), reverse=True)
-            lista = ", ".join(f"{n} ({_mb(b)})" for b, n in maiores[:2])
-            raise PortalError(422, f"Os documentos somam {_mb(total)}; o limite por envio do Lyceum é "
-                                   f"{_mb(self.max_total)}. Troque os maiores por arquivos menores: {lista}.")
-        log.warning("[lyceum-legado] ENVIO REAL POST /r/uploadDocumentosPorProcesso: %s | total %s KB", resumo,
-                    total // 1024)
-        r = await self._req(sid, "POST", "/r/uploadDocumentosPorProcesso", files=files, timeout=UPLOAD_TIMEOUT)
-        destino = r.headers.get("location", "")
-        erro_legado = r.headers.get("mensagem") or (MSG_ERRO_RE.search(r.text)[1] if MSG_ERRO_RE.search(r.text) else "")
-        titulo = _TITULO_RE.search(r.text)
-        log.warning("[lyceum-legado] resposta do envio: HTTP %s location=%s erro=%s título=%s", r.status_code,
-                    destino or "-", "sim" if erro_legado else "não",
-                    " ".join(html.unescape(titulo[1]).split())[:80] if titulo else "-")
-        if r.status_code == 413:
-            raise PortalError(422, f"O envio passou do limite de tamanho do Lyceum ({_mb(total)} no total). "
-                                   "Troque os maiores arquivos por versões menores.")
-        if r.status_code >= 500 and _TAMANHO_JAVA_RE.search(r.text):
-            raise PortalError(422, "Um dos arquivos passou do limite por arquivo do Lyceum. "
-                                   "Troque o maior arquivo por uma versão menor e tente de novo.")
-        if erro_legado or r.status_code not in (200, 302, 303):
-            raise PortalError(422, html.unescape(erro_legado) or "O Processo Seletivo não aceitou os documentos.")
-        # A resposta HTTP não basta (o legado responde 200 mesmo sem gravar): só conta o que aparece em
-        # "Documentos Ingresso". Dizer "enviado" sem estar lá faria o candidato achar que entregou.
-        return await self._confirmar_envio(sid, cod_candidato, cod_concurso, tipos, anexos, list(anexos))
-
-    async def _enviar_avulsos(self, sid: str | None, cod_candidato: str, cod_concurso: str,
-                              tipos: list[TipoDocumento], anexos: dict[str, "Anexo"],
-                              simular: bool) -> EnvioDocumentosResultado:
-        """Documento novo depois do primeiro envio: POST /r/documentosCandidato/upload, um por vez, com o campo
-        de arquivo "<código>,Ingresso" (igual ao modal de upload da tela Documentos Ingresso)."""
+        anexos = {c: a for c, a in anexos.items() if c not in entregues}  # nunca reenviar o que o Lyceum já tem
+        obrigatorios = {t.codigo for t in tipos if t.obrigatorio}
         if not anexos:
+            if entregues and obrigatorios <= set(entregues):
+                self.avancar_etapa(sid, cod_candidato, "pagamento")
+                return EnvioDocumentosResultado(
+                    simulado=False, mensagem="Seus documentos já foram enviados. Siga para o pagamento.",
+                    documentos=await self.documentos(sid, cod_candidato, cod_concurso))
             raise PortalError(409, "Anexe um documento para enviar.")
-        resumo = ", ".join(f"{c}={len(a.conteudo)}B" for c, a in anexos.items())
+        # obrigatórios primeiro, do menor para o maior: o primeiro envio leva o arquivo com mais chance de passar
+        ordem = sorted(anexos, key=lambda c: (c not in obrigatorios, len(anexos[c].conteudo)))
         if simular:
-            log.warning("[lyceum-legado] SIMULAÇÃO POST /r/documentosCandidato/upload (não enviado): %s", resumo)
+            log.warning("[lyceum-legado] SIMULAÇÃO do envio (nada enviado): %s",
+                        ", ".join(f"{c}={len(anexos[c].conteudo)}B" for c in ordem))
+            self.avancar_etapa(sid, cod_candidato, "pagamento")  # só desenvolvimento
             return EnvioDocumentosResultado(
                 simulado=True, mensagem="Envio simulado (ambiente de desenvolvimento): nada foi enviado ao Lyceum.",
-                documentos=await self.documentos(sid, cod_candidato, cod_concurso))
-        log.warning("[lyceum-legado] ENVIO REAL POST /r/documentosCandidato/upload: %s", resumo)
-        tentados, recusas = [], []
-        for codigo, a in list(anexos.items()):
-            r = await self._req(sid, "POST", "/r/documentosCandidato/upload", ajax=True, timeout=UPLOAD_TIMEOUT,
-                                files=[(f"{codigo},Ingresso", (a.nome, a.conteudo, a.mime))])
-            log.warning("[lyceum-legado] resposta do upload %s: HTTP %s", codigo, r.status_code)
-            nome = next((t.nome for t in tipos if t.codigo == codigo), codigo)
-            if r.status_code == 413:
-                recusas.append(f"{nome}: arquivo maior que o limite do Lyceum")
-            elif not 200 <= r.status_code < 300:
-                recusas.append(f"{nome}: {html.unescape(r.headers.get('mensagem') or 'não aceito pelo Lyceum')}")
+                documentos=[_status(t, anexos.get(t.codigo)) for t in tipos])
+
+        enviados: list[str] = []
+        recusados: dict[str, str] = {}
+        primeiro = not entregues
+        for codigo in ordem:
+            if primeiro and recusados:
+                # o primeiro envio não entrou: não tenta a rota do primeiro envio de novo com outro arquivo
+                recusados[codigo] = AGUARDA_PRIMEIRO
+                continue
+            if primeiro:
+                motivo = await self._enviar_primeiro(sid, tipos, codigo, anexos[codigo])
+                if not motivo:
+                    # só depois que o legado registrar o primeiro é que os outros vão pela rota avulsa
+                    primeiro = codigo not in await self.documentos_entregues(sid, cod_candidato, cod_concurso)
+                    motivo = NAO_REGISTRADO if primeiro else None
             else:
-                tentados.append(codigo)
-        if recusas and not tentados:
-            raise PortalError(422, "O Processo Seletivo não aceitou: " + "; ".join(recusas) + ".")
-        resultado = await self._confirmar_envio(sid, cod_candidato, cod_concurso, tipos, anexos, tentados)
-        if recusas:
-            resultado.mensagem += " Não foram aceitos: " + "; ".join(recusas) + "."
-        return resultado
+                motivo = await self._enviar_avulso(sid, codigo, anexos[codigo])
+            if motivo:
+                recusados[codigo] = motivo
+            else:
+                enviados.append(codigo)
+        # A resposta HTTP não basta (o legado responde 200 mesmo sem gravar): só conta o que aparece em
+        # "Documentos Ingresso". Dizer "enviado" sem estar lá faria o candidato achar que entregou.
+        return await self._confirmar_envio(sid, cod_candidato, cod_concurso, tipos, enviados, recusados)
+
+    def _grande_demais(self, a: Anexo) -> str:
+        return (f"Arquivo de {_tam(len(a.conteudo))}: maior que o limite do Lyceum ({_tam(self.max_total)} por "
+                "envio). Escolha um arquivo menor.")
+
+    async def _enviar_primeiro(self, sid: str | None, tipos: list[TipoDocumento], codigo: str, a: Anexo) -> str | None:
+        """Primeiro documento da inscrição, pelo form frm-documentos: um campo por documento da página, só este
+        preenchido. Devolve o motivo da recusa, ou None se o Lyceum aceitou a requisição."""
+        if len(a.conteudo) > self.max_total:
+            return self._grande_demais(a)
+        files = [(t.codigo, (a.nome, a.conteudo, a.mime) if t.codigo == codigo
+                  else ("", b"", "application/octet-stream")) for t in tipos]
+        log.warning("[lyceum-legado] ENVIO REAL POST /r/uploadDocumentosPorProcesso (primeiro envio): %s=%sB",
+                    codigo, len(a.conteudo))
+        r = await self._req(sid, "POST", "/r/uploadDocumentosPorProcesso", files=files, timeout=UPLOAD_TIMEOUT)
+        erro_legado = r.headers.get("mensagem") or (MSG_ERRO_RE.search(r.text)[1] if MSG_ERRO_RE.search(r.text) else "")
+        titulo = _TITULO_RE.search(r.text)
+        log.warning("[lyceum-legado] resposta do primeiro envio: HTTP %s location=%s erro=%s título=%s", r.status_code,
+                    r.headers.get("location", "") or "-", "sim" if erro_legado else "não",
+                    " ".join(html.unescape(titulo[1]).split())[:80] if titulo else "-")
+        if r.status_code == 413 or (r.status_code >= 500 and _TAMANHO_JAVA_RE.search(r.text)):
+            return self._grande_demais(a)
+        if erro_legado or r.status_code not in (200, 302, 303):
+            msg = html.unescape(erro_legado)
+            return f"O Processo Seletivo não aceitou este arquivo{': ' + msg if msg else ''}. Tente de novo."
+        return None
+
+    async def _enviar_avulso(self, sid: str | None, codigo: str, a: Anexo) -> str | None:
+        """Um documento por POST /r/documentosCandidato/upload, com o campo de arquivo "<código>,Ingresso" (igual
+        ao modal de upload da tela Documentos Ingresso). Devolve o motivo da recusa, ou None se o Lyceum aceitou."""
+        if len(a.conteudo) > self.max_total:
+            return self._grande_demais(a)
+        log.warning("[lyceum-legado] ENVIO REAL POST /r/documentosCandidato/upload: %s=%sB", codigo, len(a.conteudo))
+        r = await self._req(sid, "POST", "/r/documentosCandidato/upload", ajax=True, timeout=UPLOAD_TIMEOUT,
+                            files=[(f"{codigo},Ingresso", (a.nome, a.conteudo, a.mime))])
+        log.warning("[lyceum-legado] resposta do upload %s: HTTP %s", codigo, r.status_code)
+        if r.status_code == 413 or (r.status_code >= 500 and _TAMANHO_JAVA_RE.search(r.text)):
+            return self._grande_demais(a)
+        if not 200 <= r.status_code < 300:
+            msg = html.unescape(r.headers.get("mensagem") or "")
+            return f"O Processo Seletivo não aceitou este arquivo{': ' + msg if msg else ''}. Tente de novo."
+        return None
 
     async def _confirmar_envio(self, sid: str | None, cod_candidato: str, cod_concurso: str,
-                               tipos: list[TipoDocumento], anexos: dict[str, "Anexo"],
-                               enviados: list[str]) -> EnvioDocumentosResultado:
-        """Confere em "Documentos Ingresso" o que o Lyceum gravou; tira dos anexos só o que foi confirmado."""
+                               tipos: list[TipoDocumento], enviados: list[str],
+                               recusados: dict[str, str]) -> EnvioDocumentosResultado:
+        """Confere em "Documentos Ingresso" o que o Lyceum gravou; o que não aparece lá vira recusado."""
         entregues = await self.documentos_entregues(sid, cod_candidato, cod_concurso)
         confirmados = [c for c in enviados if c in entregues]
-        faltam = [next((t.nome for t in tipos if t.codigo == c), c) for c in enviados if c not in entregues]
-        for c in confirmados:
-            anexos.pop(c, None)
-        log.warning("[lyceum-legado] conferência do envio: gravados=%s não gravados=%s", confirmados or "-",
-                    [c for c in enviados if c not in entregues] or "-")
+        for c in enviados:
+            if c not in entregues:
+                recusados[c] = NAO_REGISTRADO
+        log.warning("[lyceum-legado] conferência do envio: gravados=%s recusados=%s", confirmados or "-",
+                    list(recusados) or "-")
+        nomes = {t.codigo: t.nome for t in tipos}
         if not confirmados:
-            raise PortalError(422, "O Processo Seletivo não registrou os documentos. Tente novamente; "
-                                   "se continuar, procure a secretaria.")
+            raise PortalError(422, resumo_recusas(nomes, recusados), recusados)
         self.invalidar_historico(sid)
         if all(t.codigo in entregues for t in tipos if t.obrigatorio):
             self.avancar_etapa(sid, cod_candidato, "pagamento")
-        mensagem = "Documentos enviados."
-        if faltam:
-            mensagem = f"Documentos enviados, exceto: {', '.join(faltam)}. Tente enviar esses de novo."
-        return EnvioDocumentosResultado(simulado=False, mensagem=mensagem,
+        return EnvioDocumentosResultado(simulado=False, mensagem=mensagem_envio(nomes, recusados), recusados=recusados,
                                         documentos=await self.documentos(sid, cod_candidato, cod_concurso))
 
     def invalidar_historico(self, sid: str | None) -> None:
@@ -963,6 +968,34 @@ def _status_entregue(t: TipoDocumento, e: Entregue) -> DocumentoStatus:
 
 def _mb(n: int) -> str:
     return f"{n / 1024 / 1024:.1f} MB".replace(".", ",")
+
+
+def _tam(n: int) -> str:
+    """Tamanho para o candidato: KB abaixo de 1 MB (os limites do DEV são de ~1 MB)."""
+    return f"{max(1, round(n / 1024))} KB" if n < 1024 * 1024 else _mb(n)
+
+
+AGUARDA_PRIMEIRO = ("Não foi enviado porque o primeiro documento não entrou no Lyceum. Troque o "
+                    "arquivo marcado e envie de novo.")
+NAO_REGISTRADO = ("O Processo Seletivo não registrou este arquivo. Tente enviar de novo; se continuar, procure a "
+                  "secretaria.")
+
+
+def resumo_recusas(nomes: dict[str, str], recusados: dict[str, str]) -> str:
+    """Aviso geral quando nada foi enviado; o motivo de cada documento vai na linha dele (`campos`)."""
+    if len(recusados) == 1:
+        codigo, motivo = next(iter(recusados.items()))
+        return f"{nomes.get(codigo, codigo)} não foi enviado. {motivo}"
+    return ("Nenhum documento foi enviado: " + ", ".join(nomes.get(c, c) for c in recusados)
+            + ". O motivo está em cada documento na lista.")
+
+
+def mensagem_envio(nomes: dict[str, str], recusados: dict[str, str]) -> str:
+    """Aviso geral quando parte foi enviada: diz quais ficaram para trocar."""
+    if not recusados:
+        return "Documentos enviados."
+    return ("Documentos enviados, exceto: " + ", ".join(nomes.get(c, c) for c in recusados)
+            + ". Troque esses arquivos e envie de novo.")
 
 
 # ---------- etapa 2: /r/pagamentoIngresso ----------

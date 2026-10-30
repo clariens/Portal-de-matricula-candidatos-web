@@ -66,6 +66,7 @@
           "auth"
         ],
         "summary": "Me",
+        "description": "Quem está logado. Sem sessão responde 200 com null: abrir o site sem login não é erro (as rotas\nprotegidas continuam respondendo 401).",
         "operationId": "me_api_v1_me_get",
         "responses": {
           "200": {
@@ -73,7 +74,15 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Pessoa"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/Pessoa"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Me Api V1 Me Get"
                 }
               }
             }
@@ -288,23 +297,25 @@
         }
       }
     },
-    "/api/v1/inscricoes/{cod_candidato}": {
+    "/api/v1/inscricoes/{ref}": {
       "get": {
         "tags": [
           "inscricoes"
         ],
         "summary": "Obter",
-        "operationId": "obter_api_v1_inscricoes__cod_candidato__get",
+        "operationId": "obter_api_v1_inscricoes__ref__get",
         "parameters": [
           {
-            "name": "cod_candidato",
+            "name": "ref",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^\\d{6,20}$",
-              "title": "Cod Candidato"
-            }
+              "pattern": "^[A-Za-z0-9_-]{20,120}$",
+              "description": "Referência opaca da inscrição (campo `ref` do histórico)",
+              "title": "Ref"
+            },
+            "description": "Referência opaca da inscrição (campo `ref` do histórico)"
           }
         ],
         "responses": {
@@ -331,23 +342,25 @@
         }
       }
     },
-    "/api/v1/inscricoes/{cod_candidato}/candidato": {
+    "/api/v1/inscricoes/{ref}/candidato": {
       "get": {
         "tags": [
           "inscricoes"
         ],
         "summary": "Obter Candidato",
-        "operationId": "obter_candidato_api_v1_inscricoes__cod_candidato__candidato_get",
+        "operationId": "obter_candidato_api_v1_inscricoes__ref__candidato_get",
         "parameters": [
           {
-            "name": "cod_candidato",
+            "name": "ref",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^\\d{6,20}$",
-              "title": "Cod Candidato"
-            }
+              "pattern": "^[A-Za-z0-9_-]{20,120}$",
+              "description": "Referência opaca da inscrição (campo `ref` do histórico)",
+              "title": "Ref"
+            },
+            "description": "Referência opaca da inscrição (campo `ref` do histórico)"
           }
         ],
         "responses": {
@@ -378,17 +391,19 @@
           "inscricoes"
         ],
         "summary": "Atualizar Candidato",
-        "operationId": "atualizar_candidato_api_v1_inscricoes__cod_candidato__candidato_put",
+        "operationId": "atualizar_candidato_api_v1_inscricoes__ref__candidato_put",
         "parameters": [
           {
-            "name": "cod_candidato",
+            "name": "ref",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^\\d{6,20}$",
-              "title": "Cod Candidato"
-            }
+              "pattern": "^[A-Za-z0-9_-]{20,120}$",
+              "description": "Referência opaca da inscrição (campo `ref` do histórico)",
+              "title": "Ref"
+            },
+            "description": "Referência opaca da inscrição (campo `ref` do histórico)"
           }
         ],
         "requestBody": {
@@ -425,23 +440,25 @@
         }
       }
     },
-    "/api/v1/inscricoes/{cod_candidato}/documentos": {
+    "/api/v1/inscricoes/{ref}/documentos": {
       "get": {
         "tags": [
           "inscricoes"
         ],
         "summary": "Listar Documentos",
-        "operationId": "listar_documentos_api_v1_inscricoes__cod_candidato__documentos_get",
+        "operationId": "listar_documentos_api_v1_inscricoes__ref__documentos_get",
         "parameters": [
           {
-            "name": "cod_candidato",
+            "name": "ref",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^\\d{6,20}$",
-              "title": "Cod Candidato"
-            }
+              "pattern": "^[A-Za-z0-9_-]{20,120}$",
+              "description": "Referência opaca da inscrição (campo `ref` do histórico)",
+              "title": "Ref"
+            },
+            "description": "Referência opaca da inscrição (campo `ref` do histórico)"
           }
         ],
         "responses": {
@@ -454,7 +471,7 @@
                   "items": {
                     "$ref": "#/components/schemas/DocumentoStatus"
                   },
-                  "title": "Response Listar Documentos Api V1 Inscricoes  Cod Candidato  Documentos Get"
+                  "title": "Response Listar Documentos Api V1 Inscricoes  Ref  Documentos Get"
                 }
               }
             }
@@ -472,14 +489,14 @@
         }
       }
     },
-    "/api/v1/inscricoes/{cod_candidato}/documentos/{tipo}": {
+    "/api/v1/inscricoes/{ref}/documentos/{tipo}": {
       "post": {
         "tags": [
           "inscricoes"
         ],
         "summary": "Anexar Documento",
         "description": "Confere o documento e devolve o resultado com um selo assinado. Nada fica guardado no servidor: o\nnavegador guarda o arquivo + selo e os devolve em POST /envio-documentos.",
-        "operationId": "anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post",
+        "operationId": "anexar_documento_api_v1_inscricoes__ref__documentos__tipo__post",
         "parameters": [
           {
             "name": "tipo",
@@ -491,14 +508,16 @@
             }
           },
           {
-            "name": "cod_candidato",
+            "name": "ref",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^\\d{6,20}$",
-              "title": "Cod Candidato"
-            }
+              "pattern": "^[A-Za-z0-9_-]{20,120}$",
+              "description": "Referência opaca da inscrição (campo `ref` do histórico)",
+              "title": "Ref"
+            },
+            "description": "Referência opaca da inscrição (campo `ref` do histórico)"
           }
         ],
         "requestBody": {
@@ -506,7 +525,7 @@
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"
+                "$ref": "#/components/schemas/Body_anexar_documento_api_v1_inscricoes__ref__documentos__tipo__post"
               }
             }
           }
@@ -535,24 +554,26 @@
         }
       }
     },
-    "/api/v1/inscricoes/{cod_candidato}/envio-documentos": {
+    "/api/v1/inscricoes/{ref}/envio-documentos": {
       "post": {
         "tags": [
           "inscricoes"
         ],
         "summary": "Enviar Documentos",
-        "description": "Envia ao Lyceum, de uma vez, os documentos que o navegador guardou (arquivo + selo de cada um).\nNo legado o primeiro envio FINALIZA a inscrição.",
-        "operationId": "enviar_documentos_api_v1_inscricoes__cod_candidato__envio_documentos_post",
+        "description": "Envia ao Lyceum os documentos que o navegador guardou (arquivo + selo de cada um), com resultado por\ndocumento: o que estiver certo segue e o que for recusado volta em `recusados` (código → motivo).\nNo legado o primeiro envio FINALIZA a inscrição.",
+        "operationId": "enviar_documentos_api_v1_inscricoes__ref__envio_documentos_post",
         "parameters": [
           {
-            "name": "cod_candidato",
+            "name": "ref",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^\\d{6,20}$",
-              "title": "Cod Candidato"
-            }
+              "pattern": "^[A-Za-z0-9_-]{20,120}$",
+              "description": "Referência opaca da inscrição (campo `ref` do histórico)",
+              "title": "Ref"
+            },
+            "description": "Referência opaca da inscrição (campo `ref` do histórico)"
           }
         ],
         "responses": {
@@ -589,23 +610,25 @@
         }
       }
     },
-    "/api/v1/inscricoes/{cod_candidato}/pagamento/opcoes": {
+    "/api/v1/inscricoes/{ref}/pagamento/opcoes": {
       "get": {
         "tags": [
           "inscricoes"
         ],
         "summary": "Opcoes Pagamento",
-        "operationId": "opcoes_pagamento_api_v1_inscricoes__cod_candidato__pagamento_opcoes_get",
+        "operationId": "opcoes_pagamento_api_v1_inscricoes__ref__pagamento_opcoes_get",
         "parameters": [
           {
-            "name": "cod_candidato",
+            "name": "ref",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^\\d{6,20}$",
-              "title": "Cod Candidato"
-            }
+              "pattern": "^[A-Za-z0-9_-]{20,120}$",
+              "description": "Referência opaca da inscrição (campo `ref` do histórico)",
+              "title": "Ref"
+            },
+            "description": "Referência opaca da inscrição (campo `ref` do histórico)"
           }
         ],
         "responses": {
@@ -632,23 +655,25 @@
         }
       }
     },
-    "/api/v1/inscricoes/{cod_candidato}/cupons/validar": {
+    "/api/v1/inscricoes/{ref}/cupons/validar": {
       "post": {
         "tags": [
           "inscricoes"
         ],
         "summary": "Validar Cupom",
-        "operationId": "validar_cupom_api_v1_inscricoes__cod_candidato__cupons_validar_post",
+        "operationId": "validar_cupom_api_v1_inscricoes__ref__cupons_validar_post",
         "parameters": [
           {
-            "name": "cod_candidato",
+            "name": "ref",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^\\d{6,20}$",
-              "title": "Cod Candidato"
-            }
+              "pattern": "^[A-Za-z0-9_-]{20,120}$",
+              "description": "Referência opaca da inscrição (campo `ref` do histórico)",
+              "title": "Ref"
+            },
+            "description": "Referência opaca da inscrição (campo `ref` do histórico)"
           }
         ],
         "requestBody": {
@@ -685,23 +710,25 @@
         }
       }
     },
-    "/api/v1/inscricoes/{cod_candidato}/pagamento": {
+    "/api/v1/inscricoes/{ref}/pagamento": {
       "post": {
         "tags": [
           "inscricoes"
         ],
         "summary": "Efetivar Pagamento",
-        "operationId": "efetivar_pagamento_api_v1_inscricoes__cod_candidato__pagamento_post",
+        "operationId": "efetivar_pagamento_api_v1_inscricoes__ref__pagamento_post",
         "parameters": [
           {
-            "name": "cod_candidato",
+            "name": "ref",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^\\d{6,20}$",
-              "title": "Cod Candidato"
-            }
+              "pattern": "^[A-Za-z0-9_-]{20,120}$",
+              "description": "Referência opaca da inscrição (campo `ref` do histórico)",
+              "title": "Ref"
+            },
+            "description": "Referência opaca da inscrição (campo `ref` do histórico)"
           }
         ],
         "requestBody": {
@@ -738,23 +765,25 @@
         }
       }
     },
-    "/api/v1/inscricoes/{cod_candidato}/matricula": {
+    "/api/v1/inscricoes/{ref}/matricula": {
       "get": {
         "tags": [
           "inscricoes"
         ],
         "summary": "Obter Matricula",
-        "operationId": "obter_matricula_api_v1_inscricoes__cod_candidato__matricula_get",
+        "operationId": "obter_matricula_api_v1_inscricoes__ref__matricula_get",
         "parameters": [
           {
-            "name": "cod_candidato",
+            "name": "ref",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^\\d{6,20}$",
-              "title": "Cod Candidato"
-            }
+              "pattern": "^[A-Za-z0-9_-]{20,120}$",
+              "description": "Referência opaca da inscrição (campo `ref` do histórico)",
+              "title": "Ref"
+            },
+            "description": "Referência opaca da inscrição (campo `ref` do histórico)"
           }
         ],
         "responses": {
@@ -781,23 +810,25 @@
         }
       }
     },
-    "/api/v1/inscricoes/{cod_candidato}/matricula/confirmar": {
+    "/api/v1/inscricoes/{ref}/matricula/confirmar": {
       "post": {
         "tags": [
           "inscricoes"
         ],
         "summary": "Confirmar Matricula",
-        "operationId": "confirmar_matricula_api_v1_inscricoes__cod_candidato__matricula_confirmar_post",
+        "operationId": "confirmar_matricula_api_v1_inscricoes__ref__matricula_confirmar_post",
         "parameters": [
           {
-            "name": "cod_candidato",
+            "name": "ref",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string",
-              "pattern": "^\\d{6,20}$",
-              "title": "Cod Candidato"
-            }
+              "pattern": "^[A-Za-z0-9_-]{20,120}$",
+              "description": "Referência opaca da inscrição (campo `ref` do histórico)",
+              "title": "Ref"
+            },
+            "description": "Referência opaca da inscrição (campo `ref` do histórico)"
           }
         ],
         "responses": {
@@ -934,7 +965,7 @@
         ],
         "title": "AreaInteresse"
       },
-      "Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post": {
+      "Body_anexar_documento_api_v1_inscricoes__ref__documentos__tipo__post": {
         "properties": {
           "arquivo": {
             "type": "string",
@@ -958,7 +989,7 @@
         "required": [
           "arquivo"
         ],
-        "title": "Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"
+        "title": "Body_anexar_documento_api_v1_inscricoes__ref__documentos__tipo__post"
       },
       "Cabecalho": {
         "properties": {
@@ -1735,6 +1766,13 @@
             },
             "type": "array",
             "title": "Documentos"
+          },
+          "recusados": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Recusados"
           }
         },
         "type": "object",
@@ -1763,6 +1801,17 @@
           "codCandidato": {
             "type": "string",
             "title": "Codcandidato"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
           },
           "codConcurso": {
             "anyOf": [

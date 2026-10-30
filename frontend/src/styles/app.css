@@ -19,7 +19,8 @@
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5}
-h1,h2,h3{font-family:var(--f-display);line-height:1.15;text-wrap:balance;margin:0}
+/* títulos: Montserrat 700 em todas as telas (a Syne, larga, fica só no título de apresentação do login) */
+h1,h2,h3,h4{font-family:var(--f-body);font-weight:700;line-height:1.2;text-wrap:balance;margin:0}
 p{margin:0}
 button,input,select{font:inherit;color:inherit}
 :focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:6px}
@@ -42,7 +43,7 @@ h1,h2{letter-spacing:-.01em}
 .areas-botao:hover:not(:disabled),.areas-botao[aria-expanded="true"]{background:var(--brand-soft);border-color:var(--brand-soft)}
 .areas-botao:disabled{opacity:.6;cursor:progress}
 .areas-menu{position:absolute;top:calc(100% + 8px);left:0;z-index:30;min-width:240px;background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:12px}
-.areas-grupo{display:block;font-family:var(--f-display);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);padding:2px 8px 6px}
+.areas-grupo{display:block;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);padding:2px 8px 6px}
 .areas-menu ul{list-style:none;margin:0;padding:0}
 .areas-menu a{display:block;padding:8px;border-radius:8px;color:var(--ink);text-decoration:none;font-size:14px}
 .areas-menu a:hover,.areas-menu a:focus-visible{background:var(--brand-soft)}
@@ -90,7 +91,7 @@ body.tela-login .topbar{background:rgba(255,255,255,.72);backdrop-filter:blur(8p
 .login{display:grid;grid-template-columns:1.15fr .85fr;gap:48px;align-items:center;min-height:calc(100vh - 190px)}
 @media (max-width:860px){.login{grid-template-columns:1fr}}
 .hero{color:var(--on-deep);padding:8px 0;display:flex;flex-direction:column;gap:22px;position:relative}
-.hero h1{font-size:clamp(30px,4.4vw,50px);font-weight:700;letter-spacing:-.02em;position:relative}
+.hero h1{font-family:var(--f-display);font-size:clamp(30px,4.4vw,50px);font-weight:700;letter-spacing:-.02em;position:relative}
 .hero h1 em{font-style:normal;color:var(--accent)}
 .hero > *{position:relative}
 /* monitor cardíaco: linha vermelha desenhada, sinal brilhante em loop e coração batendo ("tum-tum") */
@@ -123,7 +124,7 @@ body.tela-login .topbar{background:rgba(255,255,255,.72);backdrop-filter:blur(8p
 
 /* histórico */
 .page-head{display:flex;align-items:end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
-.page-head h1{font-size:clamp(26px,3.4vw,36px);font-weight:800;letter-spacing:-.015em}
+.page-head h1{font-size:clamp(26px,3.2vw,34px);font-weight:700;letter-spacing:-.02em}
 .hist{display:grid;gap:14px}
 .ins{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;padding:20px;align-items:center}
 .ins.callout{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand),var(--shadow)}
@@ -142,7 +143,7 @@ body.tela-login .topbar{background:rgba(255,255,255,.72);backdrop-filter:blur(8p
 @media (max-width:900px){.rail{position:static}}
 .steps{list-style:none;margin:0;padding:18px;display:flex;flex-direction:column;gap:4px}
 .steps li{display:flex;gap:12px;align-items:center;padding:10px;border-radius:10px;font-weight:600;color:var(--muted)}
-.steps li .n{width:30px;height:34px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:var(--surface-2);display:grid;place-items:center;border:2px solid var(--line);font-family:var(--f-display);font-size:14px;flex:none}
+.steps li .n{width:30px;height:34px;clip-path:polygon(50% 0,100% 25%,100% 75%,50% 100%,0 75%,0 25%);background:var(--surface-2);display:grid;place-items:center;border:2px solid var(--line);font-size:14px;font-weight:700;flex:none}
 .steps li.active{background:var(--brand-soft);color:var(--ink)}
 .steps li.active .n{background:var(--brand);color:var(--brand-ink)}
 .steps li.done{color:var(--ink)}
@@ -193,9 +194,9 @@ details.raw pre{white-space:pre-wrap;font-family:var(--f-mono);font-size:12px;ba
 .choice input{position:absolute;opacity:0;pointer-events:none}
 .choice:has(input:checked){border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
 .choice:has(input:focus-visible){outline:3px solid var(--focus);outline-offset:2px}
-.choice b{font-family:var(--f-display);font-size:17px}
-.choice .price{font-family:var(--f-display);font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
-.choice .price small{font-family:var(--f-body);font-size:13px;font-weight:500;color:var(--muted)}
+.choice b{font-size:17px;font-weight:700}
+.choice .price{font-size:22px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.choice .price small{font-size:13px;font-weight:500;color:var(--muted)}
 .tag{position:absolute;top:12px;right:12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:var(--med-soft);color:var(--med);padding:2px 8px;border-radius:999px}
 .voucher{display:flex;gap:8px;flex-wrap:wrap}
 .voucher .input{flex:1;min-width:200px}
@@ -205,7 +206,7 @@ details.raw pre{white-space:pre-wrap;font-family:var(--f-mono);font-size:12px;ba
 .done-hero p{color:var(--muted)}
 .done-hero h2{font-size:clamp(24px,3vw,34px);font-weight:700}
 .done-hero .mat{font-family:var(--f-mono);font-size:13px;background:var(--surface);border:1px solid var(--line);color:var(--muted);padding:10px 14px;border-radius:10px;text-align:right}
-.done-hero .mat b{display:block;font-size:22px;font-family:var(--f-display);color:var(--accent)}
+.done-hero .mat b{display:block;font-size:22px;font-weight:700;color:var(--accent)}
 @media (max-width:640px){.done-hero{grid-template-columns:1fr}.done-hero .mat{text-align:left}}
 .disc{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 @media (max-width:640px){.disc{grid-template-columns:1fr}}
@@ -213,7 +214,7 @@ details.raw pre{white-space:pre-wrap;font-family:var(--f-mono);font-size:12px;ba
 .disc li code{font-family:var(--f-mono);font-size:12px;color:var(--med)}
 .timeline{list-style:none;margin:0;padding:0;display:grid;gap:14px;counter-reset:t}
 .timeline li{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;counter-increment:t}
-.timeline li::before{content:counter(t);width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--brand-soft);color:var(--brand);font-family:var(--f-display);font-weight:700}
+.timeline li::before{content:counter(t);width:34px;height:34px;border-radius:50%;display:grid;place-items:center;background:var(--brand-soft);color:var(--brand);font-weight:700}
 
 /* inspetor de API */
 .api-fab{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:30;background:var(--brand);color:#fff;border:none;border-radius:999px;padding:11px 16px;font-weight:600;cursor:pointer;box-shadow:var(--shadow);display:flex;gap:8px;align-items:center}
@@ -253,7 +254,7 @@ a{color:var(--brand)}
 .choice:has(input:disabled){opacity:.55;cursor:not-allowed}
 .skel{background:linear-gradient(90deg,var(--surface-2),var(--surface),var(--surface-2));background-size:200% 100%;animation:skel 1.2s infinite;border-radius:12px;min-height:88px}
 @keyframes skel{to{background-position:-200% 0}}
-.sub-title{font-size:16px;font-weight:700;font-family:var(--f-display);margin-top:4px}
+.sub-title{font-size:16px;font-weight:700;margin-top:4px}
 .cobranca{display:grid;gap:4px;font-size:14px}
 .cep-group{display:flex;gap:8px;align-items:stretch}
 .btn-icon{padding:0;width:44px;min-width:44px;border-radius:10px}

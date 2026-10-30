@@ -18,6 +18,8 @@ const idx = (e: Etapa) => ETAPAS.findIndex((x) => x.id === e);
 
 interface WizardCtx {
   insc: Inscricao;
+  /** referência opaca da inscrição usada nas URLs e na API (o número não vai na URL) */
+  ref: string;
   candidato: Candidato;
   setCandidato: (c: Candidato) => void;
   recarregar: () => Promise<void>;
@@ -85,7 +87,7 @@ export function Wizard() {
   const EtapaView = { dados: EtapaDados, documentos: EtapaDocumentos, pagamento: EtapaPagamento, conclusao: EtapaConclusao }[atual];
 
   return (
-    <Ctx.Provider value={{ insc, candidato, setCandidato, recarregar, ir, somenteLeitura }}>
+    <Ctx.Provider value={{ insc, ref: id, candidato, setCandidato, recarregar, ir, somenteLeitura }}>
       <div className="page-head">
         <div>
           <span className="eyebrow">Matrícula · Inscrição #{insc.codCandidato}</span>

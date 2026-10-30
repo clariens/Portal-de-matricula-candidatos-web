@@ -10,6 +10,10 @@ import { useWizard } from "./Wizard";
 
 const MAX_MB = 10;
 
+/** Tamanho para o candidato: KB abaixo de 1 MB (os limites do Lyceum são de ~1 MB). */
+const tamanho = (n: number) =>
+  n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1).replace(".", ",")} MB`;
+
 /** Extensões que o candidato pode escolher: as do Lyceum + WEBP (convertido para JPG antes de anexar). */
 function extensoesAceitas(d: DocumentoStatus): string[] {
   const ext = d.extensoes ?? [];
@@ -60,7 +64,7 @@ function Selo({ tom, children, carregando }: { tom: Tom; children: string; carre
 }
 
 export function EtapaDocumentos() {
-  const { insc, candidato, recarregar, ir, somenteLeitura } = useWizard();
+  const { insc, ref: inscRef, candidato, recarregar, ir, somenteLeitura } = useWizard();
   const toast = useToast();
   const [docs, setDocs] = useState<DocumentoStatus[] | null>(null);
   const [local, setLocal] = useState<Record<string, Local>>({});
@@ -69,6 +73,12 @@ export function EtapaDocumentos() {
   const [drag, setDrag] = useState<string | null>(null);
   const [avancando, setAvancando] = useState(false);
   const [erroEnvio, setErroEnvio] = useState<string | null>(null);
+  // documentos recusados no envio final (ex.: acima do limite de tamanho): código → aviso na linha
+  const [recusados, setRecusados] = useState<Record<string, string>>({});
+  const limparRecusa = (tipo: string) =>
+    setRecusados((r) => { const { [tipo]: _, ...rest } = r; return rest; });
+  // documento indo ao Lyceum agora (um por chamada) e a posição dele na fila
+  const [enviando, setEnviando] = useState<{ tipo: string; n: number; total: number } | null>(null);
   // "ia": o servidor confere com IA (Claude); "navegador": OCR local (Tesseract)
   const [modo, setModo] = useState<"ia" | "navegador" | null>(null);
   const localRef = useRef(local);
@@ -80,8 +90,8 @@ export function EtapaDocumentos() {
 
   /** Documentos do Lyceum + anexos guardados neste navegador (ficam aqui até o envio final). */
   async function carregar() {
-    const id = insc.codCandidato;
-    const [ds, guardados] = await Promise.all([api.documentos(id), listarAnexos(id)]);
+    const id = insc.codCandidato; // chave dos anexos guardados neste navegador
+    const [ds, guardados] = await Promise.all([api.documentos(inscRef), listarAnexos(id)]);
     const restaurados: Record<string, Local> = {};
     const lista = ds.map((d) => {
       const g = guardados.find((x) => x.tipo === d.codigo);
@@ -130,7 +140,7 @@ export function EtapaDocumentos() {
       const a = l.analise;
       // O texto bruto do OCR não é enviado: só veredito, confiança, campos e alertas.
       const ocr = a ? { veredito: a.veredito, confianca: a.confianca ?? null, campos: a.campos, alertas: a.alertas } : undefined;
-      const st = await api.enviarDocumento(insc.codCandidato, tipo, l.arquivo, ocr);
+      const st = await api.enviarDocumento(inscRef, tipo, l.arquivo, ocr);
       await guardar(tipo, st, l.arquivo, l.convertidoDe);
       setDocs((d) => d?.map((x) => (x.codigo === tipo ? st : x)) ?? d);
       patch(tipo, { fase: "anexado" });
@@ -156,7 +166,7 @@ export function EtapaDocumentos() {
         patch(tipo, { arquivo, nome: arquivo.name, convertidoDe: "WEBP" });
       }
       miniatura(arquivo).then((thumb) => thumb && patch(tipo, { thumb })).catch(() => {});
-      const st = await api.enviarDocumento(insc.codCandidato, tipo, arquivo);
+      const st = await api.enviarDocumento(inscRef, tipo, arquivo);
       await guardar(tipo, st, arquivo, arquivo === file ? undefined : "WEBP");
       setDocs((ds) => ds?.map((x) => (x.codigo === tipo ? st : x)) ?? ds);
       const a = st.analise;
@@ -176,6 +186,7 @@ export function EtapaDocumentos() {
   }
 
   async function processar(d: DocumentoStatus, file: File) {
+    limparRecusa(d.codigo);
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
     const aceitas = extensoesAceitas(d);
     if (!aceitas.includes(ext)) return toast(`Formato não aceito. Envie: ${aceitas.join(", ").toUpperCase()}.`);
@@ -246,6 +257,7 @@ export function EtapaDocumentos() {
 
   /** Remove só do navegador: o arquivo ainda não foi ao Lyceum. */
   async function remover(tipo: string) {
+    limparRecusa(tipo);
     await removerAnexo(insc.codCandidato, tipo);
     setDocs((d) => d?.map((x) => (x.codigo === tipo
       ? { ...x, status: "pendente", arquivo: null, ocrVeredito: null, observacao: null, analise: null, selo: null }
@@ -256,32 +268,97 @@ export function EtapaDocumentos() {
     });
   }
 
+  /** Aviso acima do botão (e em toast), com rolagem até ele para não passar despercebido. */
+  function avisarEnvio(msg: string) {
+    setErroEnvio(msg);
+    toast(msg);
+    requestAnimationFrame(() => document.getElementById("erro-envio")?.scrollIntoView({ behavior: "smooth", block: "center" }));
+  }
+
+  /** Envia ao Lyceum UM documento por chamada: o que passar já fica enviado e o que for recusado fica marcado na
+   *  linha, com o motivo. Obrigatórios primeiro, do menor para o maior (o primeiro envio abre a etapa no legado). */
   async function continuar() {
     setAvancando(true);
     setErroEnvio(null);
+    setRecusados({});
+    const id = insc.codCandidato; // chave dos anexos guardados neste navegador
+    const lista = docs ?? [];
+    const doc = (tipo: string) => lista.find((d) => d.codigo === tipo);
+    const noLyceum = new Set(lista.filter((d) => STATUS_SERVIDOR[d.status ?? ""]).map((d) => d.codigo));
     try {
-      const id = insc.codCandidato;
       const guardados = await listarAnexos(id);
-      const r = await api.enviarDocumentos(id, guardados.map((g) => ({ tipo: g.tipo, nome: g.nome, arquivo: g.arquivo, selo: g.selo })));
-      // o que o Lyceum registrou sai do navegador; o que não foi gravado continua para tentar de novo
-      const registrados = new Set(r.documentos.filter((d) => d.status !== "pendente" && d.status !== "anexado").map((d) => d.codigo));
-      await Promise.all(guardados.filter((g) => registrados.has(g.tipo)).map((g) => removerAnexo(id, g.tipo)));
-      toast(r.mensagem);
-      if (!r.simulado && guardados.some((g) => !registrados.has(g.tipo))) {
-        setLocal({});
-        await carregar();
-        setAvancando(false);
-        return;
+      if (!guardados.length) {
+        // nada guardado aqui: o servidor confere se os obrigatórios já estão no Lyceum
+        const r = await api.enviarDocumentos(inscRef, []);
+        toast(r.mensagem);
+        await recarregar();
+        return ir("pagamento");
       }
-      await recarregar();
-      ir("pagamento");
+      const fila = [...guardados].sort((a, b) =>
+        Number(!!doc(b.tipo)?.obrigatorio) - Number(!!doc(a.tipo)?.obrigatorio) || a.arquivo.size - b.arquivo.size);
+      const recusas: Record<string, string> = {};
+      let simulado = false;
+      let falhaGeral: string | null = null;
+      for (const [i, g] of fila.entries()) {
+        setEnviando({ tipo: g.tipo, n: i + 1, total: fila.length });
+        let motivo: string | null = null;
+        try {
+          const r = await api.enviarDocumentos(inscRef, [{ tipo: g.tipo, nome: g.nome, arquivo: g.arquivo, selo: g.selo }]);
+          const st = r.documentos.find((d) => d.codigo === g.tipo);
+          if (r.simulado) {
+            simulado = true;
+          } else if (!r.recusados?.[g.tipo] && st && STATUS_SERVIDOR[st.status ?? ""]) {
+            // entrou no Lyceum: sai do navegador e a linha passa a "Enviado"
+            await removerAnexo(id, g.tipo);
+            setLocal((s) => { const { [g.tipo]: _, ...rest } = s; return rest; });
+            setDocs((ds) => ds?.map((x) => (x.codigo === g.tipo ? st : x)) ?? ds);
+            noLyceum.add(g.tipo);
+          } else {
+            motivo = r.recusados?.[g.tipo] ?? "O Processo Seletivo não registrou este arquivo. Tente enviar de novo.";
+          }
+        } catch (e) {
+          // recusa deste documento (vem marcada pelo código) ou 413 de um limite antes do portal (ex.: Vercel)
+          motivo = e instanceof ApiError
+            ? e.campos[g.tipo] ?? (e.status === 413 ? `Arquivo de ${tamanho(g.arquivo.size)}: passou do limite de tamanho do envio. Escolha um arquivo menor.` : null)
+            : null;
+          // sem conexão, sessão expirada, Lyceum fora do ar: para tudo (o que já foi enviado fica)
+          if (!motivo) falhaGeral = e instanceof ApiError ? e.message : "Não foi possível enviar os documentos.";
+        }
+        if (falhaGeral) break;
+        if (motivo) {
+          recusas[g.tipo] = motivo;
+          setRecusados({ ...recusas });
+          // primeiro envio recusado: não tenta os outros (só depois que o primeiro entra é que eles podem ir)
+          if (!noLyceum.size) break;
+        }
+      }
+      setEnviando(null);
+      const faltando = Object.keys(recusas);
+      if (faltando.length) setFiltro("todos"); // a linha marcada não pode ficar escondida pelo filtro
+      if (falhaGeral) {
+        const ja = fila.filter((g) => noLyceum.has(g.tipo)).length;
+        return avisarEnvio(ja ? `${falhaGeral} ${ja} documento(s) já foram enviados; envie de novo para continuar.` : falhaGeral);
+      }
+      if (faltando.length) {
+        const nomes = faltando.map((t) => doc(t)?.nome ?? t).join(", ");
+        const enviados = fila.filter((g) => noLyceum.has(g.tipo)).length;
+        return avisarEnvio(enviados
+          ? `Enviados ${enviados} de ${fila.length}. Falta trocar: ${nomes}.`
+          : `${nomes} não foi enviado: ${recusas[faltando[0]]} Os outros documentos só vão depois que este entrar no Lyceum.`);
+      }
+      if (simulado) toast("Envio simulado (ambiente de desenvolvimento): nada foi enviado ao Lyceum.");
+      else toast("Documentos enviados.");
+      if (simulado || lista.every((d) => !d.obrigatorio || noLyceum.has(d.codigo))) {
+        await recarregar();
+        return ir("pagamento");
+      }
+      // obrigatório que não estava anexado (o botão impede, mas o Lyceum é quem decide)
+      await carregar();
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : "Não foi possível enviar os documentos.";
-      setErroEnvio(msg);
-      toast(msg);
+      setEnviando(null);
+      avisarEnvio(e instanceof ApiError ? e.message : "Não foi possível enviar os documentos.");
+    } finally {
       setAvancando(false);
-      // o alerta fica logo acima do botão: rola até ele para não passar despercebido
-      requestAnimationFrame(() => document.getElementById("erro-envio")?.scrollIntoView({ behavior: "smooth", block: "center" }));
     }
   }
 
@@ -312,6 +389,8 @@ export function EtapaDocumentos() {
 
   /** Selo da linha: análise em andamento/resultado, ou situação guardada no servidor. */
   function selo(d: DocumentoStatus, l?: Local) {
+    if (enviando?.tipo === d.codigo) return <Selo tom="info" carregando>Enviando…</Selo>;
+    if (recusados[d.codigo]) return <Selo tom="bad">Não enviado · troque o arquivo</Selo>;
     if (l?.fase === "lendo") return <Selo tom="info" carregando>{l.progresso ? `Lendo… ${Math.round(l.progresso * 100)}%` : "Lendo…"}</Selo>;
     if (l?.fase === "enviando") return <Selo tom="info" carregando>Anexando…</Selo>;
     if (l?.fase === "analisando")
@@ -378,7 +457,7 @@ export function EtapaDocumentos() {
             return (
               <div
                 key={d.codigo}
-                className={`doc ${drag === d.codigo ? "drag" : ""} ${r && l?.fase === "revisar" ? `doc-${r.tom}` : ""}`}
+                className={`doc ${drag === d.codigo ? "drag" : ""} ${recusados[d.codigo] ? "doc-bad" : r && l?.fase === "revisar" ? `doc-${r.tom}` : ""}`}
                 data-doc={d.codigo}
                 onDragOver={(e) => { e.preventDefault(); setDrag(d.codigo); }}
                 onDragLeave={() => setDrag(null)}
@@ -396,10 +475,10 @@ export function EtapaDocumentos() {
                   {selo(d, l)}
                   {!somenteLeitura && (
                     <>
-                      <label className="btn btn-ghost btn-sm" htmlFor={`up-${d.codigo}`} aria-disabled={l?.fase === "lendo"}>
+                      <label className="btn btn-ghost btn-sm" htmlFor={`up-${d.codigo}`} aria-disabled={l?.fase === "lendo" || avancando}>
                         {l || d.status !== "pendente" ? "Trocar" : "Anexar"}
                       </label>
-                      {d.status === "anexado" && l?.fase !== "lendo" && l?.fase !== "enviando" && (
+                      {d.status === "anexado" && l?.fase !== "lendo" && l?.fase !== "enviando" && !avancando && (
                         <button className="btn btn-ghost btn-sm" type="button" onClick={() => remover(d.codigo)}>
                           Remover
                         </button>
@@ -409,7 +488,7 @@ export function EtapaDocumentos() {
                         type="file"
                         id={`up-${d.codigo}`}
                         accept={extensoesAceitas(d).map((e) => "." + e).join(",")}
-                        disabled={l?.fase === "lendo" || l?.fase === "enviando"}
+                        disabled={l?.fase === "lendo" || l?.fase === "enviando" || avancando}
                         onChange={(e) => {
                           const f = e.target.files?.[0];
                           e.target.value = "";
@@ -493,6 +572,20 @@ export function EtapaDocumentos() {
                     )}
                   </div>
                 )}
+                {recusados[d.codigo] && (
+                  <div className="ocr" role="alert">
+                    <p className="resultado bad">
+                      <b aria-hidden="true">✗</b> {recusados[d.codigo]}
+                    </p>
+                    {!somenteLeitura && (
+                      <div>
+                        <label className="btn btn-primary btn-sm" htmlFor={`up-${d.codigo}`}>
+                          Escolher outro arquivo
+                        </label>
+                      </div>
+                    )}
+                  </div>
+                )}
                 {!l && d.observacao && (
                   <div className="ocr">
                     <p className="resultado warn"><b aria-hidden="true">⚠</b> {d.observacao}</p>
@@ -508,7 +601,10 @@ export function EtapaDocumentos() {
       </section>
       {erroEnvio && (
         <div id="erro-envio" style={{ marginTop: 16 }}>
-          <Alert>{erroEnvio}</Alert>
+          <Alert>
+            {erroEnvio}
+            {Object.keys(recusados).length > 0 && " O que precisa ser trocado está marcado em vermelho na lista acima."}
+          </Alert>
         </div>
       )}
       <div className="foot">
@@ -526,7 +622,9 @@ export function EtapaDocumentos() {
               disabled={prontosObrig < obrig.length || ocupado || avancando}
               onClick={continuar}
             >
-              {avancando ? <><Spin /> Enviando documentos</> : "Enviar documentos e continuar"}
+              {avancando
+                ? <><Spin /> {enviando ? `Enviando ${enviando.n} de ${enviando.total}` : "Enviando documentos"}</>
+                : "Enviar documentos e continuar"}
             </button>
           </div>
         )}

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from pydantic import ValidationError
 from starlette.datastructures import UploadFile as StarletteUpload
 
-from app.api.deps import gateway, inscricao_autorizada
+from app.api.deps import com_ref, gateway, inscricao_autorizada
 from app.config import Settings, get_settings
 from app.core.errors import PortalError
 from app.core.selo import emitir_selo, verificar_selo
@@ -25,6 +25,7 @@ from app.services.conferencia import conferir
 from app.services.ia_documentos import IAIndisponivel, LeitorDocumentos
 from app.services.lyceum import LyceumGateway
 from app.services.lyceum.catalogo import EXTENSOES_ACEITAS, MAGIC
+from app.services.lyceum.legado import mensagem_envio, resumo_recusas
 
 router = APIRouter(tags=["inscricoes"])
 MSG_IA_INDISPONIVEL = ("Não foi possível conferir este documento automaticamente agora. Ele vai para a secretaria "
@@ -37,34 +38,34 @@ TIPO_RE = re.compile(r"\w{1,10}")
 
 # ---------- histórico ----------
 @router.get("/inscricoes", response_model=list[Inscricao])
-async def listar(user: SessionUser = User, gw: LyceumGateway = Gw):
-    return await gw.listar_inscricoes(user.cod_pessoa)
+async def listar(user: SessionUser = User, gw: LyceumGateway = Gw, s: Settings = Depends(get_settings)):
+    return com_ref([i.model_copy() for i in await gw.listar_inscricoes(user.cod_pessoa)], user, s)
 
 
-@router.get("/inscricoes/{cod_candidato}", response_model=Inscricao)
+@router.get("/inscricoes/{ref}", response_model=Inscricao)
 async def obter(insc: Inscricao = Insc):
     return insc
 
 
 # ---------- etapa: dados ----------
-@router.get("/inscricoes/{cod_candidato}/candidato", response_model=Candidato)
+@router.get("/inscricoes/{ref}/candidato", response_model=Candidato)
 async def obter_candidato(insc: Inscricao = Insc, user: SessionUser = User, gw: LyceumGateway = Gw):
     return await gw.obter_candidato(user.cod_pessoa, insc)
 
 
-@router.put("/inscricoes/{cod_candidato}/candidato", response_model=Candidato)
+@router.put("/inscricoes/{ref}/candidato", response_model=Candidato)
 async def atualizar_candidato(body: CandidatoUpdate, insc: Inscricao = Insc, user: SessionUser = User,
                               gw: LyceumGateway = Gw):
     return await gw.atualizar_candidato(user.cod_pessoa, insc, body)
 
 
 # ---------- etapa: documentos ----------
-@router.get("/inscricoes/{cod_candidato}/documentos", response_model=list[DocumentoStatus])
+@router.get("/inscricoes/{ref}/documentos", response_model=list[DocumentoStatus])
 async def listar_documentos(insc: Inscricao = Insc, user: SessionUser = User, gw: LyceumGateway = Gw):
     return await gw.listar_documentos(user.cod_pessoa, insc)
 
 
-@router.post("/inscricoes/{cod_candidato}/documentos/{tipo}", response_model=DocumentoStatus)
+@router.post("/inscricoes/{ref}/documentos/{tipo}", response_model=DocumentoStatus)
 async def anexar_documento(
     request: Request,
     tipo: str,
@@ -140,55 +141,65 @@ async def _conferir_com_ia(leitor, s: Settings, request: Request, insc: Inscrica
     return DocumentoStatus(**esperado.model_dump(exclude={"analise", "status"}), status=status, analise=resultado)
 
 
-@router.post("/inscricoes/{cod_candidato}/envio-documentos", response_model=EnvioDocumentosResultado,
+@router.post("/inscricoes/{ref}/envio-documentos", response_model=EnvioDocumentosResultado,
              openapi_extra={"requestBody": {"content": {"multipart/form-data": {"schema": {
                  "type": "object", "description": "Para cada documento: arquivo_<código> (arquivo) e "
                                                   "selo_<código> (o selo devolvido no anexo)."}}}}})
 async def enviar_documentos(request: Request, insc: Inscricao = Insc, user: SessionUser = User,
                             gw: LyceumGateway = Gw, s: Settings = Depends(get_settings)):
-    """Envia ao Lyceum, de uma vez, os documentos que o navegador guardou (arquivo + selo de cada um).
+    """Envia ao Lyceum os documentos que o navegador guardou (arquivo + selo de cada um), com resultado por
+    documento: o que estiver certo segue e o que for recusado volta em `recusados` (código → motivo).
+    Aceita N documentos, mas o navegador manda UM por chamada (progresso na tela e requisições pequenas).
     No legado o primeiro envio FINALIZA a inscrição."""
     form = await request.form(max_files=40)
-    anexos = {}
+    anexos, recusados = {}, {}
     for chave, valor in form.multi_items():
         tipo = chave.removeprefix("arquivo_")
         if tipo == chave or not isinstance(valor, StarletteUpload) or not TIPO_RE.fullmatch(tipo):
             continue
         conteudo = await valor.read(s.portal_upload_max_mb * 1024 * 1024 + 1)
-        nome, analise = verificar_selo(s, str(form.get(f"selo_{tipo}") or ""), insc.cod_candidato, tipo, conteudo)
-        nome, mime = _validar_arquivo(nome, conteudo, s)
         try:
+            nome, analise = verificar_selo(s, str(form.get(f"selo_{tipo}") or ""), insc.cod_candidato, tipo, conteudo)
+            nome, mime = _validar_arquivo(nome, conteudo, s)
             _, anexos[tipo] = await gw.anexar_documento(user.cod_pessoa, insc, tipo, nome, conteudo, mime, analise)
         except PortalError as e:
             if e.status != 409:  # 409 = o Lyceum já tem este documento: nunca reenviar
-                raise
-    return await gw.enviar_documentos(user.cod_pessoa, insc, anexos)
+                recusados[tipo] = e.mensagem  # ex.: selo vencido ou acima do limite: só este fica para trás
+    if recusados:
+        nomes = {d.codigo: d.nome for d in await gw.listar_documentos(user.cod_pessoa, insc)}
+        if not anexos:
+            raise PortalError(422, resumo_recusas(nomes, recusados), recusados)
+    resultado = await gw.enviar_documentos(user.cod_pessoa, insc, anexos)
+    if recusados:
+        resultado.recusados = {**recusados, **resultado.recusados}
+        resultado.mensagem = mensagem_envio(nomes, resultado.recusados)
+    return resultado
 
 
 # ---------- etapa: pagamento ----------
-@router.get("/inscricoes/{cod_candidato}/pagamento/opcoes", response_model=OpcoesPagamento)
+@router.get("/inscricoes/{ref}/pagamento/opcoes", response_model=OpcoesPagamento)
 async def opcoes_pagamento(insc: Inscricao = Insc, user: SessionUser = User, gw: LyceumGateway = Gw):
     return await gw.opcoes_pagamento(user.cod_pessoa, insc)
 
 
-@router.post("/inscricoes/{cod_candidato}/cupons/validar", response_model=CupomResultado)
+@router.post("/inscricoes/{ref}/cupons/validar", response_model=CupomResultado)
 async def validar_cupom(body: CupomIn, insc: Inscricao = Insc, user: SessionUser = User, gw: LyceumGateway = Gw):
     return await gw.validar_cupom(user.cod_pessoa, insc, body.codigo)
 
 
-@router.post("/inscricoes/{cod_candidato}/pagamento", response_model=PagamentoResultado)
+@router.post("/inscricoes/{ref}/pagamento", response_model=PagamentoResultado)
 async def efetivar_pagamento(body: PagamentoIn, insc: Inscricao = Insc, user: SessionUser = User,
                              gw: LyceumGateway = Gw):
     return await gw.efetivar_pagamento(user.cod_pessoa, insc, body)
 
 
 # ---------- etapa: conclusão ----------
-@router.get("/inscricoes/{cod_candidato}/matricula", response_model=Matricula)
+@router.get("/inscricoes/{ref}/matricula", response_model=Matricula)
 async def obter_matricula(insc: Inscricao = Insc, user: SessionUser = User, gw: LyceumGateway = Gw):
     return await gw.obter_matricula(user.cod_pessoa, insc)
 
 
-@router.post("/inscricoes/{cod_candidato}/matricula/confirmar", response_model=ConfirmacaoResultado)
+@router.post("/inscricoes/{ref}/matricula/confirmar", response_model=ConfirmacaoResultado)
 async def confirmar_matricula(insc: Inscricao = Insc, user: SessionUser = User, gw: LyceumGateway = Gw):
     return await gw.confirmar_matricula(user.cod_pessoa, insc)
 

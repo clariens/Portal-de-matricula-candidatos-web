@@ -200,16 +200,22 @@ class FakeLyceum:
         return st, anexo
 
     async def enviar_documentos(self, cod_pessoa, insc, anexos: dict[str, Anexo]) -> EnvioDocumentosResultado:
+        """Como o legado: aceita qualquer parte dos documentos (o navegador manda um por chamada) e só libera o
+        pagamento quando todos os obrigatórios estiverem enviados."""
         self._exigir_convocado(insc)
         enviados = self.documentos.setdefault(insc.cod_candidato, {})
-        faltando = [t.nome for t in TIPOS_DOCUMENTO if t.obrigatorio and t.codigo not in anexos and t.codigo not in enviados]
-        if faltando:
-            raise PortalError(409, "Anexe os documentos obrigatórios: " + ", ".join(faltando) + ".")
+        if not anexos:
+            if not all(t.codigo in enviados for t in TIPOS_DOCUMENTO if t.obrigatorio):
+                raise PortalError(409, "Anexe um documento para enviar.")
+            self._avancar(insc.cod_candidato, "pagamento")
+            return EnvioDocumentosResultado(simulado=False, mensagem="Seus documentos já foram enviados. Siga para o pagamento.",
+                                            documentos=await self.listar_documentos(cod_pessoa, insc))
         for t in TIPOS_DOCUMENTO:
             if t.codigo in anexos:  # para o candidato, só "enviado" (aceite é da secretaria)
                 enviados[t.codigo] = DocumentoStatus(**t.model_dump(), status="enviado", arquivo=anexos[t.codigo].nome,
                                                      enviado_em=anexos[t.codigo].em)
-        self._avancar(insc.cod_candidato, "pagamento")
+        if all(t.codigo in enviados for t in TIPOS_DOCUMENTO if t.obrigatorio):
+            self._avancar(insc.cod_candidato, "pagamento")
         return EnvioDocumentosResultado(simulado=False, mensagem="Documentos enviados.",
                                         documentos=await self.listar_documentos(cod_pessoa, insc))
 

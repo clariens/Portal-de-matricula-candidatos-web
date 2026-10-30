@@ -11,6 +11,15 @@ Quem tem o Basic consegue agir em nome de **qualquer** candidato, porque o Lyceu
   inscrições da pessoa da sessão e responde 404 se `{cod}` não estiver entre elas.
 - O corpo das requisições não carrega ids de pessoa, candidato ou concurso.
 
+## Número da inscrição fora das URLs
+- As telas (`/matricula/{ref}/…`) e a API (`/api/v1/inscricoes/{ref}/…`) usam uma referência opaca, criptografada com
+  AES-SIV (chave derivada do `PORTAL_SESSION_SECRET`) e amarrada à sessão (sid + pessoa). O número da inscrição não
+  aparece na barra de endereço, no histórico do navegador, em links compartilhados nem nos logs de acesso.
+- A referência só esconde o número: a autorização continua sendo `inscricao_autorizada` (a inscrição tem que ser
+  da pessoa logada). Referência de outra sessão ou adulterada → 404.
+- O número continua visível **na tela** para o próprio candidato (histórico e topo do wizard), para falar com a
+  secretaria.
+
 ## Sessão
 - Cookie `portal_session`: assinado com `PORTAL_SESSION_SECRET` (itsdangerous), `HttpOnly`, `SameSite=Lax`, `Secure` em
   produção (`PORTAL_COOKIE_SECURE=true`), expira em `PORTAL_SESSION_HORAS` (12 h).

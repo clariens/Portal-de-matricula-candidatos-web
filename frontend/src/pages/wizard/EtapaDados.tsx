@@ -48,7 +48,7 @@ function validar(f: Form) {
 }
 
 export function EtapaDados() {
-  const { insc, candidato, setCandidato, recarregar, ir, somenteLeitura } = useWizard();
+  const { ref, candidato, setCandidato, recarregar, ir, somenteLeitura } = useWizard();
   const toast = useToast();
   const [f, setF] = useState<Form>(() => paraForm(candidato));
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -76,7 +76,7 @@ export function EtapaDados() {
         ...f, sexo: f.sexo as CandidatoUpdate["sexo"], telefone: f.telefone || null, cpf: f.tipoDoc === "cpf" ? f.cpf : null,
         endereco: { ...f.endereco, complemento: f.endereco.complemento || null },
       };
-      setCandidato(await api.salvarCandidato(insc.codCandidato, body));
+      setCandidato(await api.salvarCandidato(ref, body));
       await recarregar();
       ir("documentos");
     } catch (err) {

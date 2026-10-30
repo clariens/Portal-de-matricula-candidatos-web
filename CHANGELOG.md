@@ -14,8 +14,31 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
   `/recuperarsenha` do legado: o Processo Seletivo envia as instruções ao e-mail cadastrado.
 - Logo "Clariens Educação" centralizado no card de login, sem o subtítulo "Área do candidato". No cabeçalho, o
   logo sozinho substitui "Clariens Educação · Medicina".
+- **Envio de documentos um por chamada, do navegador até o Lyceum.** Antes, o navegador mandava todos os arquivos
+  numa requisição e o primeiro envio ao Lyceum levava todos os obrigatórios juntos: com 6 obrigatórios (1.047.131
+  bytes) o nginx do DEV (1 MiB por requisição) devolvia 413 e nada era enviado. Agora:
+  - o navegador manda um documento por vez (obrigatórios primeiro, do menor para o maior), com "Enviando 2 de 6" no
+    botão e "Enviando…" na linha da vez; o que entra vira "Enviado" na hora e sai do navegador;
+  - o primeiro documento da inscrição vai sozinho pela rota do form (`/r/uploadDocumentosPorProcesso`, que abre a
+    etapa) e os seguintes por `/r/documentosCandidato/upload`; o limite de tamanho vale por arquivo, nunca pela soma;
+  - o que for recusado (grande demais, conferência vencida, não registrado) fica marcado em vermelho com o motivo e
+    "Escolher outro arquivo", e os demais seguem. Se o primeiro documento não entrar, os outros esperam (o portal
+    não tenta abrir a etapa de novo com outro arquivo);
+  - o pagamento só abre com todos os obrigatórios no Lyceum; o servidor deixou de exigir os obrigatórios na mesma
+    chamada.
+- **Ícone da aba** (favicon) com o "C" da Clariens: `favicon.svg` (fica branco em aba escura), `favicon.ico` de
+  reserva e `apple-touch-icon.png` para a tela inicial do celular, em `frontend/public/`.
 - **Monitor cardíaco** na apresentação do login: linha vermelha desenhada, um sinal brilhante percorrendo o traçado
   em loop e um coração batendo em dois tempos com anel pulsando. Fica parado com `prefers-reduced-motion`.
+
+### Segurança
+- **Número da inscrição fora das URLs.** Telas e API usam uma referência opaca (AES-SIV, válida só na sessão de
+  quem entrou) em vez do número: `/matricula/MPPLPxqz…/documentos`. Número na URL → 422; referência de outra sessão
+  → 404. O número segue visível na tela para o próprio candidato.
+
+### Alterado
+- Títulos e destaques em Montserrat 700 em todas as telas (a Syne, larga, ficava achatada em negrito). A Syne fica
+  só no título de apresentação do login.
 
 ### Corrigido (login)
 - O menu "Área de interesse" demorava até 20 s para aparecer com o Processo Seletivo fora: agora desiste em 4 s,

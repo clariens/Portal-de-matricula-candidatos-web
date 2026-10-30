@@ -33,9 +33,12 @@ irreversível no Lyceum e precisa de aval antes do primeiro envio real. Visão g
 - [x] Lista de documentos lida da página real; obrigatórios conforme o processo
 - [x] Conferência por IA (Claude) no servidor; OCR do navegador como reserva; WEBP aceito
 - [x] Anexos guardados no navegador (IndexedDB) com selo assinado; nada no servidor entre requisições
-- [x] Primeiro envio em lote (`uploadDocumentosPorProcesso`) e envios seguintes um a um (`documentosCandidato/upload`)
+- [x] Um documento por chamada: o primeiro pela rota do form (`uploadDocumentosPorProcesso`), sozinho; os seguintes por `documentosCandidato/upload`
+- [x] Resultado por documento: o que for recusado fica marcado e o resto é enviado; progresso na tela
+- [ ] Confirmar em DEV que o legado registra o primeiro envio com um documento só (próximo envio na inscrição que deu 413)
 - [x] "Enviado" só quando aparece em "Documentos Ingresso"; nunca reenvia o que o Lyceum já tem
 - [x] Compressão de fotos; limites de tamanho do DEV medidos (1.000.000 bytes por arquivo, 1 MiB por envio)
+- [x] Envio recusado por tamanho aponta o documento e marca a linha dele
 - [ ] Limites de upload de produção — **(Lyceum)**
 - [ ] Substituir documento recusado pela secretaria (mesma rota `documentosCandidato/upload`)
 
@@ -67,7 +70,7 @@ irreversível no Lyceum e precisa de aval antes do primeiro envio real. Visão g
 - [ ] Menu do cabeçalho apontando para as telas novas (legado como reserva)
 
 ## Fase 7 — Endurecimento e entrega
-- [x] Testes: pytest (118), vitest (17) e e2e Playwright (fluxo completo, cabeçalho, recuperação de senha)
+- [x] Testes: pytest (123), vitest (17) e e2e Playwright (fluxo completo, cabeçalho, recuperação de senha)
 - [x] Logs `[lyceum]` sem PII; `/api/v1/health`
 - [x] Vercel (Services) sem banco de dados; validado com duas instâncias atendendo o mesmo candidato
 - [ ] CI (lint + testes + e2e) no pipeline

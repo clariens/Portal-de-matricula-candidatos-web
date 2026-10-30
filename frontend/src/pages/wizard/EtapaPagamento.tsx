@@ -37,7 +37,7 @@ export const COBRANCA_KEY = (id: string) => `cobranca:${id}`;
 const vazio = (v: string) => v.trim() || null;
 
 export function EtapaPagamento() {
-  const { insc, ir, recarregar } = useWizard();
+  const { insc, ref, ir, recarregar } = useWizard();
   const toast = useToast();
   const [op, setOp] = useState<OpcoesPagamento | null>(null);
   const [fechada, setFechada] = useState(false);
@@ -56,7 +56,7 @@ export function EtapaPagamento() {
 
   useEffect(() => {
     api
-      .opcoesPagamento(insc.codCandidato)
+      .opcoesPagamento(ref)
       .then((o) => {
         setOp(o);
         setPlanos(o.planos);
@@ -70,7 +70,7 @@ export function EtapaPagamento() {
         setFechada(e instanceof ApiError && e.status === 409);
         setErro(e instanceof ApiError ? e.message : "Erro ao carregar as opções de pagamento.");
       });
-  }, [insc.codCandidato]);
+  }, [ref]);
 
   const setR = <K extends keyof RespForm>(k: K) => (v: RespForm[K]) => setResp((r) => ({ ...r, [k]: v }));
 
@@ -79,7 +79,7 @@ export function EtapaPagamento() {
     if (!c) return;
     setValidando(true);
     try {
-      const r = await api.validarCupom(insc.codCandidato, c);
+      const r = await api.validarCupom(ref, c);
       setCupomMsg({ ok: r.valido, msg: r.mensagem });
       setCupomAplicado(r.valido ? c.toUpperCase() : null);
       if (r.valido && r.planos) setPlanos(r.planos);
@@ -137,7 +137,7 @@ export function EtapaPagamento() {
     }
     setEnviando(true);
     try {
-      const r = await api.efetivarPagamento(insc.codCandidato, {
+      const r = await api.efetivarPagamento(ref, {
         tipoResp: tipo, codigoPlano: plano, voucher: cupomAplicado, responsavel: responsavel(),
       });
       if (r.simulado) {

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type Request } from "@playwright/test";
 
 /** Gera no navegador uma imagem PNG com as linhas de texto (documento fictício) para o OCR real ler. */
 async function documento(page: Page, linhas: string[], nome: string, mime = "image/png") {
@@ -57,6 +57,9 @@ test("fluxo completo de matrícula (dublê do Lyceum)", async ({ page }) => {
 
   // etapa 1: dados (erro por campo e correção)
   await expect(page.getByRole("heading", { name: "Seus dados" })).toBeVisible();
+  // a URL usa uma referência opaca: o número da inscrição não aparece na barra de endereço
+  await expect(page).toHaveURL(/\/matricula\/[A-Za-z0-9_-]{20,}\/dados$/);
+  expect(page.url()).not.toContain("2027100000162");
   const cel = page.getByLabel("Celular (WhatsApp)");
   await cel.fill("349");
   await page.getByRole("button", { name: "Salvar e continuar" }).click();
@@ -141,7 +144,58 @@ test("fluxo completo de matrícula (dublê do Lyceum)", async ({ page }) => {
   await expect(decl.locator(".chip")).toContainText("Para conferência · pronto para envio");
   await expect(vacina.locator(".chip")).toHaveCount(0); // o removido continua removido
 
-  await page.getByRole("button", { name: "Enviar documentos e continuar" }).click();
+  // envio um documento por chamada; o primeiro recusado fica marcado e os outros esperam (o primeiro abre a etapa)
+  const enviar = page.locator(".foot .btn-primary");
+  const tipoDaChamada = (req: Request) => /name="arquivo_(\d+)"/.exec(req.postDataBuffer()?.toString("latin1") ?? "")?.[1] ?? "";
+  const chamadas: string[] = [];
+  await page.route("**/envio-documentos", (r) => {
+    const tipo = tipoDaChamada(r.request());
+    chamadas.push(tipo);
+    return r.fulfill({ status: 422, json: { erro: {
+      mensagem: "Não foi enviado.",
+      campos: { [tipo]: "Arquivo de 900 KB: maior que o limite do Lyceum (1000 KB por envio). Escolha um arquivo menor." },
+    } } });
+  });
+  await page.getByRole("button", { name: "Pendentes" }).click(); // a linha marcada não pode ficar escondida
+  await enviar.click();
+  await expect(page.locator("#erro-envio")).toContainText("Os outros documentos só vão depois que este entrar no Lyceum.");
+  await expect(page.locator("#erro-envio")).toContainText("marcado em vermelho");
+  const marcada = page.locator(".doc.doc-bad");
+  await expect(marcada).toHaveCount(1);
+  expect(chamadas).toHaveLength(1); // um documento por chamada, e parou no primeiro
+  await expect(marcada).toHaveAttribute("data-doc", chamadas[0]);
+  await expect(marcada.locator(".chip")).toHaveText(/Não enviado · troque o arquivo/);
+  await expect(marcada).toContainText("Arquivo de 900 KB: maior que o limite do Lyceum");
+  await page.unroute("**/envio-documentos");
+  // 413 sem corpo (limite antes do portal, ex.: Vercel): marca o documento daquela chamada
+  await page.route("**/envio-documentos", (r) => r.fulfill({ status: 413, body: "Request Entity Too Large" }), { times: 1 });
+  await enviar.click();
+  await expect(marcada).toHaveCount(1);
+  await expect(marcada).toContainText("passou do limite de tamanho do envio");
+  // escolher outro arquivo na linha marcada tira a marca
+  const codigo = await marcada.getAttribute("data-doc");
+  const nova = codigo === "04"
+    ? await documento(page, ["REGISTRO GERAL", `NOME ${nome}`, "NASCIMENTO 14/03/2004"], "rg2.png")
+    : codigo === "05"
+      ? await documento(page, ["CADASTRO DE PESSOA FISICA", `NOME ${nome}`, "CPF 123.456.789-09"], "cpf2.png")
+      : codigo === "03"
+        ? await documento(page, ["HISTORICO ESCOLAR", `ALUNO ${nome}`, "CONCLUSAO EM 2021"], "hist2.png")
+        : await documento(page, ["DECLARACAO DE CONCLUSAO", `ALUNO ${nome}`, "CONCLUIU EM 2023"], "decl2.png");
+  await page.locator(`#up-${codigo}`).setInputFiles(nova);
+  await expect(page.locator(".doc.doc-bad")).toHaveCount(codigo === "02" ? 1 : 0);
+  if (codigo === "02") {
+    await decl.getByRole("button", { name: "Manter este e enviar para conferência manual" }).click();
+    await expect(page.locator(".doc.doc-bad")).toHaveCount(0);
+  }
+
+  // envio de verdade: um por vez, com o progresso no botão e "Enviando…" na linha da vez
+  await page.route("**/envio-documentos", async (r) => {
+    await new Promise((ok) => setTimeout(ok, 400));
+    await r.continue();
+  });
+  await enviar.click();
+  await expect(enviar).toContainText(/Enviando \d de 4/);
+  await expect(page.locator(".chip", { hasText: "Enviando…" })).toHaveCount(1);
 
   // etapa 3: pagamento
   await expect(page.getByRole("heading", { name: "Pagamento", exact: true })).toBeVisible();

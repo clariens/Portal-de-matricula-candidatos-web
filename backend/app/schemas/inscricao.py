@@ -9,6 +9,8 @@ Etapa = Literal["dados", "documentos", "pagamento", "conclusao"]
 
 class Inscricao(ApiModel):
     cod_candidato: str
+    # referência opaca para URLs (telas e API); o número da inscrição não vai na URL (app/core/referencia.py)
+    ref: str | None = None
     cod_concurso: str | None = None  # o histórico legado só expõe o concurso em Convocado/Pré-Matriculado
     data_inscricao: str
     processo: str

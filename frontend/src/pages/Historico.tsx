@@ -43,7 +43,7 @@ export function Historico() {
           <p>
             Você foi convocado(a) para <b>{conv.curso}</b> no {conv.unidade}. Faça sua matrícula para garantir a vaga.
           </p>
-          <button className="btn btn-primary" onClick={() => nav(`/matricula/${conv.codCandidato}`)}>
+          <button className="btn btn-primary" onClick={() => nav(`/matricula/${conv.ref ?? ""}`)}>
             {conv.acoes.includes("continuar_matricula") ? "Continuar matrícula" : "Fazer matrícula"}
           </button>
         </div>
@@ -89,17 +89,17 @@ export function Historico() {
             </div>
             <div className="actions">
               {(i.acoes.includes("matricular") || i.acoes.includes("continuar_matricula")) && (
-                <button className="btn btn-primary" onClick={() => nav(`/matricula/${i.codCandidato}`)}>
+                <button className="btn btn-primary" onClick={() => nav(`/matricula/${i.ref ?? ""}`)}>
                   {i.acoes.includes("continuar_matricula") ? "Continuar matrícula" : "Fazer matrícula"}
                 </button>
               )}
               {i.acoes.includes("contrato") && (
-                <button className="btn btn-ghost" onClick={() => nav(`/matricula/${i.codCandidato}/conclusao`)}>
+                <button className="btn btn-ghost" onClick={() => nav(`/matricula/${i.ref ?? ""}/conclusao`)}>
                   Ver contrato
                 </button>
               )}
               {i.acoes.includes("documentos") && (
-                <button className="btn btn-ghost" onClick={() => nav(`/matricula/${i.codCandidato}/documentos`)}>
+                <button className="btn btn-ghost" onClick={() => nav(`/matricula/${i.ref ?? ""}/documentos`)}>
                   Documentos
                 </button>
               )}

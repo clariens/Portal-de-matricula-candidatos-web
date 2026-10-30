@@ -45,7 +45,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Me */
+        /**
+         * Me
+         * @description Quem está logado. Sem sessão responde 200 com null: abrir o site sem login não é erro (as rotas
+         *     protegidas continuam respondendo 401).
+         */
         get: operations["me_api_v1_me_get"];
         put?: never;
         post?: never;
@@ -160,7 +164,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/inscricoes/{cod_candidato}": {
+    "/api/v1/inscricoes/{ref}": {
         parameters: {
             query?: never;
             header?: never;
@@ -168,7 +172,7 @@ export interface paths {
             cookie?: never;
         };
         /** Obter */
-        get: operations["obter_api_v1_inscricoes__cod_candidato__get"];
+        get: operations["obter_api_v1_inscricoes__ref__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -177,7 +181,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/inscricoes/{cod_candidato}/candidato": {
+    "/api/v1/inscricoes/{ref}/candidato": {
         parameters: {
             query?: never;
             header?: never;
@@ -185,9 +189,9 @@ export interface paths {
             cookie?: never;
         };
         /** Obter Candidato */
-        get: operations["obter_candidato_api_v1_inscricoes__cod_candidato__candidato_get"];
+        get: operations["obter_candidato_api_v1_inscricoes__ref__candidato_get"];
         /** Atualizar Candidato */
-        put: operations["atualizar_candidato_api_v1_inscricoes__cod_candidato__candidato_put"];
+        put: operations["atualizar_candidato_api_v1_inscricoes__ref__candidato_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -195,7 +199,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/inscricoes/{cod_candidato}/documentos": {
+    "/api/v1/inscricoes/{ref}/documentos": {
         parameters: {
             query?: never;
             header?: never;
@@ -203,7 +207,7 @@ export interface paths {
             cookie?: never;
         };
         /** Listar Documentos */
-        get: operations["listar_documentos_api_v1_inscricoes__cod_candidato__documentos_get"];
+        get: operations["listar_documentos_api_v1_inscricoes__ref__documentos_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -212,7 +216,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/inscricoes/{cod_candidato}/documentos/{tipo}": {
+    "/api/v1/inscricoes/{ref}/documentos/{tipo}": {
         parameters: {
             query?: never;
             header?: never;
@@ -226,14 +230,14 @@ export interface paths {
          * @description Confere o documento e devolve o resultado com um selo assinado. Nada fica guardado no servidor: o
          *     navegador guarda o arquivo + selo e os devolve em POST /envio-documentos.
          */
-        post: operations["anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"];
+        post: operations["anexar_documento_api_v1_inscricoes__ref__documentos__tipo__post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/inscricoes/{cod_candidato}/envio-documentos": {
+    "/api/v1/inscricoes/{ref}/envio-documentos": {
         parameters: {
             query?: never;
             header?: never;
@@ -244,17 +248,18 @@ export interface paths {
         put?: never;
         /**
          * Enviar Documentos
-         * @description Envia ao Lyceum, de uma vez, os documentos que o navegador guardou (arquivo + selo de cada um).
+         * @description Envia ao Lyceum os documentos que o navegador guardou (arquivo + selo de cada um), com resultado por
+         *     documento: o que estiver certo segue e o que for recusado volta em `recusados` (código → motivo).
          *     No legado o primeiro envio FINALIZA a inscrição.
          */
-        post: operations["enviar_documentos_api_v1_inscricoes__cod_candidato__envio_documentos_post"];
+        post: operations["enviar_documentos_api_v1_inscricoes__ref__envio_documentos_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/inscricoes/{cod_candidato}/pagamento/opcoes": {
+    "/api/v1/inscricoes/{ref}/pagamento/opcoes": {
         parameters: {
             query?: never;
             header?: never;
@@ -262,7 +267,7 @@ export interface paths {
             cookie?: never;
         };
         /** Opcoes Pagamento */
-        get: operations["opcoes_pagamento_api_v1_inscricoes__cod_candidato__pagamento_opcoes_get"];
+        get: operations["opcoes_pagamento_api_v1_inscricoes__ref__pagamento_opcoes_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -271,7 +276,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/inscricoes/{cod_candidato}/cupons/validar": {
+    "/api/v1/inscricoes/{ref}/cupons/validar": {
         parameters: {
             query?: never;
             header?: never;
@@ -281,14 +286,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Validar Cupom */
-        post: operations["validar_cupom_api_v1_inscricoes__cod_candidato__cupons_validar_post"];
+        post: operations["validar_cupom_api_v1_inscricoes__ref__cupons_validar_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/inscricoes/{cod_candidato}/pagamento": {
+    "/api/v1/inscricoes/{ref}/pagamento": {
         parameters: {
             query?: never;
             header?: never;
@@ -298,14 +303,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Efetivar Pagamento */
-        post: operations["efetivar_pagamento_api_v1_inscricoes__cod_candidato__pagamento_post"];
+        post: operations["efetivar_pagamento_api_v1_inscricoes__ref__pagamento_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/inscricoes/{cod_candidato}/matricula": {
+    "/api/v1/inscricoes/{ref}/matricula": {
         parameters: {
             query?: never;
             header?: never;
@@ -313,7 +318,7 @@ export interface paths {
             cookie?: never;
         };
         /** Obter Matricula */
-        get: operations["obter_matricula_api_v1_inscricoes__cod_candidato__matricula_get"];
+        get: operations["obter_matricula_api_v1_inscricoes__ref__matricula_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -322,7 +327,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/inscricoes/{cod_candidato}/matricula/confirmar": {
+    "/api/v1/inscricoes/{ref}/matricula/confirmar": {
         parameters: {
             query?: never;
             header?: never;
@@ -332,7 +337,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Confirmar Matricula */
-        post: operations["confirmar_matricula_api_v1_inscricoes__cod_candidato__matricula_confirmar_post"];
+        post: operations["confirmar_matricula_api_v1_inscricoes__ref__matricula_confirmar_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -424,8 +429,8 @@ export interface components {
             /** Itens */
             itens: components["schemas"]["LinkLegado"][];
         };
-        /** Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post */
-        Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post: {
+        /** Body_anexar_documento_api_v1_inscricoes__ref__documentos__tipo__post */
+        Body_anexar_documento_api_v1_inscricoes__ref__documentos__tipo__post: {
             /** Arquivo */
             arquivo: string;
             /**
@@ -680,6 +685,10 @@ export interface components {
             mensagem: string;
             /** Documentos */
             documentos: components["schemas"]["DocumentoStatus"][];
+            /** Recusados */
+            recusados?: {
+                [key: string]: string;
+            };
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -690,6 +699,8 @@ export interface components {
         Inscricao: {
             /** Codcandidato */
             codCandidato: string;
+            /** Ref */
+            ref?: string | null;
             /** Codconcurso */
             codConcurso?: string | null;
             /** Datainscricao */
@@ -1038,7 +1049,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Pessoa"];
+                    "application/json": components["schemas"]["Pessoa"] | null;
                 };
             };
         };
@@ -1198,12 +1209,13 @@ export interface operations {
             };
         };
     };
-    obter_api_v1_inscricoes__cod_candidato__get: {
+    obter_api_v1_inscricoes__ref__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                cod_candidato: string;
+                /** @description Referência opaca da inscrição (campo `ref` do histórico) */
+                ref: string;
             };
             cookie?: never;
         };
@@ -1229,12 +1241,13 @@ export interface operations {
             };
         };
     };
-    obter_candidato_api_v1_inscricoes__cod_candidato__candidato_get: {
+    obter_candidato_api_v1_inscricoes__ref__candidato_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                cod_candidato: string;
+                /** @description Referência opaca da inscrição (campo `ref` do histórico) */
+                ref: string;
             };
             cookie?: never;
         };
@@ -1260,12 +1273,13 @@ export interface operations {
             };
         };
     };
-    atualizar_candidato_api_v1_inscricoes__cod_candidato__candidato_put: {
+    atualizar_candidato_api_v1_inscricoes__ref__candidato_put: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                cod_candidato: string;
+                /** @description Referência opaca da inscrição (campo `ref` do histórico) */
+                ref: string;
             };
             cookie?: never;
         };
@@ -1295,12 +1309,13 @@ export interface operations {
             };
         };
     };
-    listar_documentos_api_v1_inscricoes__cod_candidato__documentos_get: {
+    listar_documentos_api_v1_inscricoes__ref__documentos_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                cod_candidato: string;
+                /** @description Referência opaca da inscrição (campo `ref` do histórico) */
+                ref: string;
             };
             cookie?: never;
         };
@@ -1326,19 +1341,20 @@ export interface operations {
             };
         };
     };
-    anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post: {
+    anexar_documento_api_v1_inscricoes__ref__documentos__tipo__post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 tipo: string;
-                cod_candidato: string;
+                /** @description Referência opaca da inscrição (campo `ref` do histórico) */
+                ref: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "multipart/form-data": components["schemas"]["Body_anexar_documento_api_v1_inscricoes__cod_candidato__documentos__tipo__post"];
+                "multipart/form-data": components["schemas"]["Body_anexar_documento_api_v1_inscricoes__ref__documentos__tipo__post"];
             };
         };
         responses: {
@@ -1362,12 +1378,13 @@ export interface operations {
             };
         };
     };
-    enviar_documentos_api_v1_inscricoes__cod_candidato__envio_documentos_post: {
+    enviar_documentos_api_v1_inscricoes__ref__envio_documentos_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                cod_candidato: string;
+                /** @description Referência opaca da inscrição (campo `ref` do histórico) */
+                ref: string;
             };
             cookie?: never;
         };
@@ -1397,12 +1414,13 @@ export interface operations {
             };
         };
     };
-    opcoes_pagamento_api_v1_inscricoes__cod_candidato__pagamento_opcoes_get: {
+    opcoes_pagamento_api_v1_inscricoes__ref__pagamento_opcoes_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                cod_candidato: string;
+                /** @description Referência opaca da inscrição (campo `ref` do histórico) */
+                ref: string;
             };
             cookie?: never;
         };
@@ -1428,12 +1446,13 @@ export interface operations {
             };
         };
     };
-    validar_cupom_api_v1_inscricoes__cod_candidato__cupons_validar_post: {
+    validar_cupom_api_v1_inscricoes__ref__cupons_validar_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                cod_candidato: string;
+                /** @description Referência opaca da inscrição (campo `ref` do histórico) */
+                ref: string;
             };
             cookie?: never;
         };
@@ -1463,12 +1482,13 @@ export interface operations {
             };
         };
     };
-    efetivar_pagamento_api_v1_inscricoes__cod_candidato__pagamento_post: {
+    efetivar_pagamento_api_v1_inscricoes__ref__pagamento_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                cod_candidato: string;
+                /** @description Referência opaca da inscrição (campo `ref` do histórico) */
+                ref: string;
             };
             cookie?: never;
         };
@@ -1498,12 +1518,13 @@ export interface operations {
             };
         };
     };
-    obter_matricula_api_v1_inscricoes__cod_candidato__matricula_get: {
+    obter_matricula_api_v1_inscricoes__ref__matricula_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                cod_candidato: string;
+                /** @description Referência opaca da inscrição (campo `ref` do histórico) */
+                ref: string;
             };
             cookie?: never;
         };
@@ -1529,12 +1550,13 @@ export interface operations {
             };
         };
     };
-    confirmar_matricula_api_v1_inscricoes__cod_candidato__matricula_confirmar_post: {
+    confirmar_matricula_api_v1_inscricoes__ref__matricula_confirmar_post: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                cod_candidato: string;
+                /** @description Referência opaca da inscrição (campo `ref` do histórico) */
+                ref: string;
             };
             cookie?: never;
         };
