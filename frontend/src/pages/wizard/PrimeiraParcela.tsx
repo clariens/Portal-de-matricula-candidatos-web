@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../../api/client";
-import type { PagamentoResultado, Pix } from "../../api/types";
+import type { Inscricao, PagamentoResultado, Pix } from "../../api/types";
 import { Alert, Chip, Spin, useToast } from "../../components/ui";
 import { brl } from "../../lib/format";
 
@@ -24,9 +24,22 @@ function gerar(ref: string, forma: Forma): Promise<Blob | Pix> {
 
 /** 1ª parcela depois de confirmar o pagamento: boleto em PDF ou PIX com QR code e copia e cola, gerados na hora
  *  pelo Processo Seletivo. Sem a forma (aba nova), a pessoa escolhe qual gerar. */
-export function PrimeiraParcela({ inscRef, cobranca }: { inscRef: string; cobranca: Cobranca | null }) {
-  const forma = cobranca?.formaPagamento;
+export function PrimeiraParcela({ inscRef, cobranca, insc }: { inscRef: string; cobranca: Cobranca | null; insc?: Inscricao }) {
+  const daInscricao = insc?.formaPagamento?.toUpperCase() === "PIX" ? "PIX" : insc?.formaPagamento?.toLowerCase() === "boleto" ? "Boleto" : undefined;
+  const forma = cobranca?.formaPagamento ?? daInscricao;
+  const pago = /^pago/i.test(insc?.statusPagamento ?? "");
   const [escolhida, setEscolhida] = useState<Forma | null>(forma === "Boleto" || forma === "PIX" ? forma : null);
+
+  if (pago)
+    return (
+      <section className="card panel" style={{ marginTop: 16 }}>
+        <div className="panel-head">
+          <h2>Primeira parcela</h2>
+          <Chip tone="ok">Paga</Chip>
+        </div>
+        <p className="muted">O pagamento da 1ª parcela já foi confirmado.</p>
+      </section>
+    );
 
   return (
     <section className="card panel" style={{ marginTop: 16 }}>
@@ -41,6 +54,11 @@ export function PrimeiraParcela({ inscRef, cobranca }: { inscRef: string; cobran
             {cobranca.vencimento ? ` · vencimento ${cobranca.vencimento}` : ""}
           </span>
           {forma === "Cartao" && <span className="muted">{cobranca.instrucoes}</span>}
+        </div>
+      )}
+      {!cobranca && insc?.vencimento && (
+        <div className="cobranca">
+          <span>Vencimento {insc.vencimento}{insc.statusPagamento ? ` · ${insc.statusPagamento}` : ""}</span>
         </div>
       )}
       {forma !== "Cartao" && !escolhida && (

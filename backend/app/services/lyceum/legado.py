@@ -69,6 +69,7 @@ from app.schemas.documento import (
     TipoDocumento,
 )
 from app.schemas.inscricao import Inscricao
+from app.schemas.matricula import Contrato, Matricula
 from app.schemas.pagamento import (
     Cobranca,
     CupomResultado,
@@ -676,6 +677,39 @@ class ClienteLegado:
             self.avancar_etapa(sid, cod_candidato, "pagamento")
         return lista
 
+    async def documentos_consulta(self, sid: str | None, cod_candidato: str, cod_concurso: str) -> list[DocumentoStatus]:
+        """Depois do pagamento (Pré-Matriculado): só o que o Lyceum registrou, como o botão Documentos do histórico
+        (tela "Documentos Ingresso"). A página de envio do processo já não abre nesse ponto."""
+        catalogo = {t.codigo: t for t in TIPOS_DOCUMENTO}
+        lista = []
+        for codigo, e in (await self.documentos_entregues(sid, cod_candidato, cod_concurso)).items():
+            t = catalogo.get(codigo) or TipoDocumento(codigo=codigo, nome=_nome_documento(e.nome) or codigo,
+                                                      obrigatorio=bool(re.search(r"obrigat", e.nome, re.IGNORECASE)),
+                                                      regra=REGRA_POR_TIPO.get(codigo, "nome"))
+            lista.append(_status_entregue(t.model_copy(deep=True), e))
+        return lista
+
+    async def matricula(self, sid: str | None, insc: Inscricao) -> Matricula:
+        """Matrícula depois do pagamento, como o botão Contrato do histórico: GET r/contrato/geraContratoAceite
+        (codigoAluno = número da matrícula) e a página /r/contrato, que traz as instruções de assinatura pela
+        Clicksign (o contrato vai por WhatsApp ao responsável financeiro). O botão "Próximo" do legado
+        (POST r/contrato/aceitaContrato.json) não é chamado aqui."""
+        if not insc.matricula:
+            raise PortalError(409, "A matrícula ainda não foi gerada. Conclua o pagamento.")
+        instrucoes: list[str] = []
+        try:
+            await self.get_json(sid, "/r/contrato/geraContratoAceite", {"codigoAluno": insc.matricula})
+            r = await self.get(sid, "/r/contrato")
+            instrucoes = parse_instrucoes_contrato(r.text) if r.status_code == 200 else []
+        except PortalError as e:  # sem as instruções a tela usa as padrão; a matrícula continua visível
+            log.warning("[lyceum-legado] instruções do contrato indisponíveis: %s", e.mensagem)
+        periodo = re.match(r"\s*(\d{4}\.\d)", insc.processo)
+        return Matricula(
+            matricula=insc.matricula, curso=insc.curso, unidade=insc.unidade or None,
+            periodo=periodo[1] if periodo else None, disciplinas=[], forma_pagamento=insc.forma_pagamento,
+            contrato=Contrato(status="assinado" if insc.contrato_aceito else "aguardando_assinatura",
+                              instrucoes=instrucoes))
+
     async def anexar(self, sid: str | None, cod_candidato: str, cod_concurso: str, tipo: str, nome: str,
                      conteudo: bytes, mime: str, ocr: OcrResultado | None) -> tuple[DocumentoStatus, Anexo]:
         """Valida e prepara (comprime fotos) um documento. Não guarda nada: o navegador guarda o arquivo e o
@@ -840,7 +874,7 @@ _TR_RE = re.compile(r"<tr[^>]*>(.*?)</tr>", re.DOTALL | re.IGNORECASE)
 _COL_RE = re.compile(r'<td[^>]*class="[^"]*col-data-([a-z-]+)[^"]*"[^>]*>(.*?)</td>', re.DOTALL | re.IGNORECASE)
 _INGRESSO_RE = re.compile(r"/r/ingresso\?codCandidato=(\d+)&(?:amp;)?codConcurso=([\w-]+)")
 _DOCS_RE = re.compile(r"documentosPorProcessoCandidato\?q=([A-Za-z0-9+/=%]+)")
-_CONTRATO_RE = re.compile(r"chamaContrato\(")
+_CONTRATO_RE = re.compile(r"chamaContrato\(\s*['\"]?(\d*)")
 
 
 def _texto(fragmento: str) -> str:
@@ -878,7 +912,8 @@ def parse_historico(pagina: str) -> list[Inscricao]:
         acoes: list[str] = []
         if ingresso and situacao == "Convocado":
             acoes.append("matricular")
-        if _CONTRATO_RE.search(tr):
+        contrato_btn = _CONTRATO_RE.search(tr)
+        if contrato_btn:
             acoes.append("contrato")
         if docs:
             acoes.append("documentos")
@@ -894,6 +929,7 @@ def parse_historico(pagina: str) -> list[Inscricao]:
             vencimento=_vazio(col.get("vencimento-pagamento", "")),
             status_pagamento=_vazio(col.get("status-pagamento", "")),
             contrato_aceito=None if contrato is None else contrato.strip().lower() in ("sim", "s"),
+            matricula=contrato_btn[1] or None if contrato_btn else None,
             agendamento=_vazio(col.get("agendamento", "")),
             sala=_vazio(col.get("sala", "")),
             acoes=acoes,
@@ -1040,6 +1076,7 @@ class Entregue:
     motivo: str | None
     data: str | None
     id: str = ""  # id do documento entregue no Lyceum (usado no download do arquivo)
+    nome: str = ""
 
 
 _ENTREGUE_COD_RE = re.compile(r"openModalWindown\('([^']*)',\s*'([^']+)'")
@@ -1056,8 +1093,28 @@ def parse_documentos_entregues(pagina: str) -> dict[str, Entregue]:
         aceito = re.search(r'title="([^"]*)"', col.get("aceito", ""))
         itens[cod[2]] = Entregue(aceito=html.unescape(aceito[1]).strip() if aceito else "Pendente",
                                  motivo=_vazio(_texto(col.get("motivo-recusa", ""))) or None,
-                                 data=_vazio(_texto(col.get("data-entrega", ""))) or None, id=cod[1])
+                                 data=_vazio(_texto(col.get("data-entrega", ""))) or None, id=cod[1],
+                                 nome=" ".join(_texto(col.get("documento", "")).split()))
     return itens
+
+
+def _nome_documento(titulo: str) -> str:
+    """Nome do documento na tela "Documentos Ingresso" (ex.: "CPF - Obrigatório" → "CPF")."""
+    return re.sub(r"\s*-\s*obrigat[óo]rio\s*$", "", titulo, flags=re.IGNORECASE).strip()
+
+
+_CONTRATO_BLOCO_RE = re.compile(r'id="contrato_id"[^>]*>(.*?)(?:<form|<div class="row">\s*<p>\s*<button|$)',
+                                re.DOTALL | re.IGNORECASE)
+
+
+def parse_instrucoes_contrato(pagina: str) -> list[str]:
+    """Texto do bloco #contrato_id da página /r/contrato, uma linha por parágrafo/quebra (sem HTML)."""
+    m = _CONTRATO_BLOCO_RE.search(pagina)
+    if not m:
+        return []
+    bloco = re.sub(r"<br[^>]*>|</p>|</div>|</li>", "\n", m[1], flags=re.IGNORECASE)
+    linhas = (" ".join(html.unescape(re.sub(r"<[^>]+>", "", x)).split()) for x in bloco.split("\n"))
+    return [x for x in linhas if x][:40]
 
 
 def _status_entregue(t: TipoDocumento, e: Entregue) -> DocumentoStatus:

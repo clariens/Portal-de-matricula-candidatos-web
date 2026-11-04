@@ -1594,6 +1594,14 @@
               }
             ],
             "title": "Destinatario"
+          },
+          "instrucoes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Instrucoes",
+            "default": []
           }
         },
         "type": "object",
@@ -2042,6 +2050,17 @@
               }
             ],
             "title": "Contratoaceito"
+          },
+          "matricula": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matricula"
           },
           "agendamento": {
             "anyOf": [

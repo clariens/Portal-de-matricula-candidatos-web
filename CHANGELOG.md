@@ -4,6 +4,11 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
 
 ## [Não lançado]
 ### Adicionado
+- **Contrato e documentos depois do pagamento.** Para inscrição pré-matriculada, "Ver contrato" abre a conclusão
+  com o número da matrícula (código do aluno do histórico), a situação do contrato e as instruções de assinatura
+  lidas da página de contrato do legado (Clicksign pelo WhatsApp do responsável financeiro); a 1ª parcela usa a forma
+  e a situação do histórico (paga não gera nada). "Documentos" mostra, em consulta, o que o Lyceum registrou.
+  Antes os dois davam erro (o portal exigia a inscrição em "Convocado" e a conclusão não estava ligada ao legado).
 - **Boleto e PIX da 1ª parcela.** Depois de confirmar o pagamento, a conclusão mostra o bloco "Primeira parcela":
   boleto em PDF ("Abrir boleto" e "Baixar") ou PIX com QR code, código copia e cola ("Copiar código"), valor e
   recebedor, gerados na hora pelo Processo Seletivo (`r/terminoIngresso/gerarBoleto` ou `r/historico/gerarBoleto`;

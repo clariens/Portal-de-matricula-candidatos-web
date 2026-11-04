@@ -12,6 +12,8 @@ class Contrato(ApiModel):
     status: Literal["nao_enviado", "aguardando_assinatura", "assinado"]
     canal: str = "Clicksign · WhatsApp"
     destinatario: str | None = None  # celular mascarado do responsável financeiro
+    # instruções de assinatura mostradas pelo Processo Seletivo (/r/contrato), linha a linha
+    instrucoes: list[str] = []
 
 
 class Matricula(ApiModel):

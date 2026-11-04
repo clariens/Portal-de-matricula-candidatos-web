@@ -21,6 +21,7 @@ class Inscricao(ApiModel):
     vencimento: str | None = None
     status_pagamento: str | None = None
     contrato_aceito: bool | None = None
+    matricula: str | None = None  # código do aluno, depois do pagamento (chamaContrato no histórico legado)
     agendamento: str | None = None
     sala: str | None = None
     # Progresso do wizard de matrícula (quando situacao = Convocado)

@@ -33,6 +33,7 @@ from app.core.session import sessao_atual
 from app.core.validators import digits, mask_cep
 from app.schemas.auth import Pessoa
 from app.schemas.candidato import CepResultado, Municipio, Uf
+from app.schemas.matricula import ConfirmacaoResultado
 from app.services.lyceum.catalogo import UFS
 from app.services.lyceum.legado import ClienteLegado, SessoesLegado
 from app.services.lyceum.mappers import map_pessoa, map_pessoa_lyceum, pick
@@ -62,6 +63,9 @@ ENDPOINTS: dict[str, str | None] = {
     "confirmar_matricula": None,
     "questionarios_pendentes": None,
 }
+
+# depois do efetivar.json: o formulário de dados fecha; sobram documentos (consulta), contrato e cobrança
+POS_PAGAMENTO = ("Pré-Matriculado", "Matriculado")
 
 NECESSIDADE = {
     "listar_inscricoes": "histórico de inscrições do candidato",
@@ -305,6 +309,9 @@ class TechneGateway:
     async def listar_documentos(self, cod_pessoa, insc):
         # Legado: lista lida da página real /r/documentosPorProcesso + anexos guardados no servidor
         if self._usa_legado:
+            if insc.situacao in POS_PAGAMENTO and insc.cod_concurso:
+                # depois do pagamento: consulta do que o Lyceum registrou (botão Documentos do histórico)
+                return await self.legado.documentos_consulta(sessao_atual.get(), insc.cod_candidato, insc.cod_concurso)
             self._exigir_convocado(insc)
             return await self.legado.documentos(sessao_atual.get(), insc.cod_candidato, insc.cod_concurso)
         self._endpoint("listar_documentos")
@@ -372,9 +379,21 @@ class TechneGateway:
         self._endpoint("pix_pagamento")
 
     async def obter_matricula(self, cod_pessoa, insc):
+        # Legado: número da matrícula do histórico + instruções de assinatura da página /r/contrato
+        if self._usa_legado:
+            if insc.situacao not in POS_PAGAMENTO:
+                raise PortalError(409, "A matrícula ainda não foi gerada. Conclua o pagamento.")
+            return await self.legado.matricula(sessao_atual.get(), insc)
         self._endpoint("obter_matricula")
 
     async def confirmar_matricula(self, cod_pessoa, insc):
+        # Legado: depois do pagamento não há o que gravar pelo portal. A assinatura do contrato é feita na
+        # Clicksign (link no WhatsApp do responsável financeiro); o "Próximo" do legado
+        # (r/contrato/aceitaContrato.json) e o questionário (r/historico/questionario) ainda não foram mapeados.
+        if self._usa_legado:
+            if insc.situacao not in POS_PAGAMENTO:
+                raise PortalError(409, "A matrícula ainda não pode ser confirmada.")
+            return ConfirmacaoResultado(situacao=insc.situacao)
         self._endpoint("confirmar_matricula")
 
     async def questionarios_pendentes(self, cod_pessoa):

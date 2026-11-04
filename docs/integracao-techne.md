@@ -19,7 +19,8 @@ BFF segue o **mapa de rotas do Processo Seletivo legado na sessão do próprio c
 | Prévia de documento entregue | legado | `GET /r/documentosCandidato/download?q=&id=` (id do 1º argumento de `openModalWindown`); sem arquivo, o legado responde página de erro "Byte array must not be null". Na API, `download_documento_pessoa` dá 403 para a conta de serviço |
 | Envio de documentos | legado | um documento por requisição: o primeiro da inscrição por `POST /r/uploadDocumentosPorProcesso` (rota do form, abre a etapa; só ele preenchido), os seguintes por `POST /r/documentosCandidato/upload`. O limite de 1 MiB do DEV vale por arquivo. O form do legado exige os obrigatórios juntos só no navegador (`required`) |
 | Pagamento | legado | `GET /r/pagamentoIngresso`, `POST …/validarvoucher`, `POST …/efetivar.json` (em simulação). Boleto, PIX e cartão: [pagamento-legado.md](pagamento-legado.md) |
-| Conclusão | — | ainda não ligada: `/r/terminoIngresso` e `proximo.json` (ver [roadmap.md](roadmap.md)) |
+| Conclusão (depois do pagamento) | legado | matrícula = código do aluno em `chamaContrato('…')` do histórico; contrato: `GET r/contrato/geraContratoAceite?codigoAluno=` + `GET /r/contrato` (instruções de assinatura pela Clicksign em `#contrato_id`). O "Próximo" do legado (`POST r/contrato/aceitaContrato.json {"aceitouContrato"}`) e o questionário (`r/historico/questionario`) não são chamados |
+| Documentos depois do pagamento | legado | consulta pela tela "Documentos Ingresso" (`/r/documentosPorProcessoCandidato?q=`): só o que o Lyceum registrou. O download dá "Byte array must not be null" para documentos enviados pelo formulário de lote, inclusive no próprio legado (04/11/2026); os enviados pela rota avulsa abrem |
 
 A tabela abaixo é o levantamento da API v2 (16/10/2026), mantido para a migração quando o Lyceum liberar rotas de
 candidato.

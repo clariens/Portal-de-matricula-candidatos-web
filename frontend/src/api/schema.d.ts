@@ -646,6 +646,11 @@ export interface components {
             canal: string;
             /** Destinatario */
             destinatario?: string | null;
+            /**
+             * Instrucoes
+             * @default []
+             */
+            instrucoes: string[];
         };
         /** CupomIn */
         CupomIn: {
@@ -785,6 +790,8 @@ export interface components {
             statusPagamento?: string | null;
             /** Contratoaceito */
             contratoAceito?: boolean | null;
+            /** Matricula */
+            matricula?: string | null;
             /** Agendamento */
             agendamento?: string | null;
             /** Sala */

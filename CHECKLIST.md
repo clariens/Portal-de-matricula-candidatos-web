@@ -63,7 +63,9 @@ irreversível no Lyceum e precisa de aval antes do primeiro envio real. Visão g
 
 ## Fase 5 — Conclusão e pós-matrícula
 - [x] Tela de sucesso (matrícula, 1ª parcela, contrato, disciplinas) — hoje só no dublê dos testes
-- [ ] Conclusão pelo legado: `/r/terminoIngresso` e `proximo.json` — **(autorização)**
+- [x] Conclusão depois do pagamento: matrícula, situação e instruções do contrato (`/r/contrato`), documentos em consulta
+- [ ] "Próximo" do contrato (`aceitaContrato.json`) e `proximo.json` do término — **(autorização)**
+- [ ] Prévia de documentos enviados pelo formulário de lote (download do legado sem o arquivo) — **(Lyceum)**
 - [ ] Questionário pendente (`/r/questionario`)
 - [ ] Status real do contrato Clicksign
 
