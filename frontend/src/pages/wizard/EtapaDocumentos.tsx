@@ -83,6 +83,55 @@ export function EtapaDocumentos() {
   const [modo, setModo] = useState<"ia" | "navegador" | null>(null);
   const localRef = useRef(local);
   localRef.current = local;
+  // prévia do que o Lyceum já tem: miniatura (imagem) ou PDF, para abrir no visor; ou indisponível
+  const [previas, setPrevias] = useState<Record<string, Previa>>({});
+  const previasRef = useRef(previas);
+  previasRef.current = previas;
+  const buscando = useRef(new Set<string>());
+  const [vendo, setVendo] = useState<Visto | null>(null);
+
+  // libera os arquivos da memória ao sair da etapa
+  useEffect(() => () => Object.values(previasRef.current).forEach((x) => x.url && URL.revokeObjectURL(x.url)), []);
+
+  // prévias dos documentos já no Lyceum (também ao voltar por outro caminho): 2 de cada vez, em segundo plano
+  useEffect(() => {
+    if (!docs) return;
+    const fila = docs
+      .filter((d) => STATUS_SERVIDOR[d.status ?? ""] && !previasRef.current[d.codigo] && !buscando.current.has(d.codigo))
+      .map((d) => d.codigo);
+    fila.forEach((c) => buscando.current.add(c));
+    let ativo = true;
+    const proximo = async (): Promise<void> => {
+      const tipo = ativo ? fila.shift() : undefined;
+      if (!tipo) return;
+      try {
+        const blob = await api.arquivoDocumento(inscRef, tipo);
+        const pdf = blob.type === "application/pdf";
+        const thumb = pdf ? undefined : await miniatura(new File([blob], tipo, { type: blob.type })).catch(() => undefined);
+        setPrevias((x) => ({ ...x, [tipo]: { url: URL.createObjectURL(blob), pdf, thumb } }));
+      } catch {
+        setPrevias((x) => ({ ...x, [tipo]: { indisponivel: true } }));
+      }
+      return proximo();
+    };
+    void Promise.all([proximo(), proximo()]);
+    return () => {
+      ativo = false;
+      fila.forEach((c) => buscando.current.delete(c)); // os que não começaram voltam para a próxima rodada
+    };
+  }, [docs, inscRef]);
+
+  /** Abre o documento no visor: o arquivo anexado neste navegador ou a prévia do que o Lyceum já tem. */
+  function ver(d: DocumentoStatus) {
+    const l = localRef.current[d.codigo];
+    const p = previas[d.codigo];
+    if (l?.arquivo) {
+      const pdf = l.arquivo.type === "application/pdf";
+      setVendo({ nome: d.nome, url: URL.createObjectURL(l.arquivo), pdf, arquivo: l.nome, temporaria: true });
+    } else if (p?.url) {
+      setVendo({ nome: d.nome, url: p.url, pdf: !!p.pdf, arquivo: `${d.nome}${p.pdf ? ".pdf" : ".jpg"}`, temporaria: false });
+    }
+  }
 
   useEffect(() => {
     api.recursos().then((r) => setModo(r.conferenciaDocumentos)).catch(() => setModo("navegador"));
@@ -310,6 +359,9 @@ export function EtapaDocumentos() {
           } else if (!r.recusados?.[g.tipo] && st && STATUS_SERVIDOR[st.status ?? ""]) {
             // entrou no Lyceum: sai do navegador e a linha passa a "Enviado"
             await removerAnexo(id, g.tipo);
+            buscando.current.add(g.tipo);
+            const thumb = localRef.current[g.tipo]?.thumb;
+            setPrevias((x) => ({ ...x, [g.tipo]: { url: URL.createObjectURL(g.arquivo), pdf: g.arquivo.type === "application/pdf", thumb } }));
             setLocal((s) => { const { [g.tipo]: _, ...rest } = s; return rest; });
             setDocs((ds) => ds?.map((x) => (x.codigo === g.tipo ? st : x)) ?? ds);
             noLyceum.add(g.tipo);
@@ -463,12 +515,24 @@ export function EtapaDocumentos() {
                 onDragLeave={() => setDrag(null)}
                 onDrop={onDrop(d)}
               >
-                {l?.thumb ? <img className="thumb" src={l.thumb} alt="" /> : <span className="code">{d.codigo}</span>}
+                {(() => {
+                  const p = previas[d.codigo];
+                  const thumb = l?.thumb ?? p?.thumb;
+                  const pdf = l ? l.arquivo.type === "application/pdf" : !!p?.pdf;
+                  if (!l?.arquivo && !p?.url) return thumb ? <img className="thumb" src={thumb} alt="" /> : <span className="code">{d.codigo}</span>;
+                  return (
+                    <button type="button" className="thumb-btn" onClick={() => ver(d)} aria-label={`Ver ${d.nome}`} title="Ver documento">
+                      {thumb ? <img className="thumb" src={thumb} alt="" /> : pdf ? <span className="thumb thumb-pdf">PDF</span> : <span className="code">{d.codigo}</span>}
+                    </button>
+                  );
+                })()}
                 <div style={{ minWidth: 0 }}>
                   <h4>{d.nome}</h4>
                   <div className="sub">
                     {d.obrigatorio ? <b style={{ color: "var(--bad)" }}>Obrigatório</b> : "Opcional"}
-                    {l ? <> · <span className="mono">{l.nome}</span>{l.convertidoDe ? ` (convertido de ${l.convertidoDe})` : ""}</> : d.arquivo ? <> · <span className="mono">{d.arquivo}</span>{d.enviadoEm ? ` · ${d.enviadoEm}` : ""}</> : !somenteLeitura && " · arraste o arquivo aqui"}
+                    {l ? <> · <span className="mono">{l.nome}</span>{l.convertidoDe ? ` (convertido de ${l.convertidoDe})` : ""}</> : d.arquivo ? <> · <span className="mono">{d.arquivo}</span>{d.enviadoEm ? ` · ${d.enviadoEm}` : ""}</>
+                      : STATUS_SERVIDOR[d.status ?? ""] ? <>{d.enviadoEm ? ` · enviado em ${d.enviadoEm}` : ""}{previas[d.codigo]?.indisponivel && <span className="previa-off"> · prévia indisponível</span>}</>
+                      : !somenteLeitura && " · arraste o arquivo aqui"}
                   </div>
                 </div>
                 <div className="right">
@@ -607,6 +671,15 @@ export function EtapaDocumentos() {
           </Alert>
         </div>
       )}
+      {vendo && (
+        <Visor
+          visto={vendo}
+          fechar={() => {
+            if (vendo.temporaria) URL.revokeObjectURL(vendo.url);
+            setVendo(null);
+          }}
+        />
+      )}
       <div className="foot">
         <button className="btn btn-ghost" type="button" onClick={() => ir(somenteLeitura ? "conclusao" : "dados")}>
           Voltar
@@ -630,6 +703,44 @@ export function EtapaDocumentos() {
         )}
       </div>
     </>
+  );
+}
+
+interface Previa {
+  url?: string;
+  pdf?: boolean;
+  thumb?: string;
+  indisponivel?: boolean; // o Lyceum registrou o documento, mas não devolve o arquivo
+}
+
+interface Visto {
+  nome: string;
+  url: string;
+  pdf: boolean;
+  arquivo: string; // nome sugerido para baixar
+  temporaria: boolean; // URL criada só para o visor (anexo local): liberada ao fechar
+}
+
+/** Visor do documento: imagem ou PDF, com opção de baixar. Usa o <dialog> nativo (foco e Esc do navegador). */
+function Visor({ visto, fechar }: { visto: Visto; fechar: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dlg = ref.current;
+    if (dlg && !dlg.open) dlg.showModal();
+  }, []);
+  return (
+    <dialog ref={ref} className="visor" aria-label={visto.nome} onClose={fechar} onClick={(e) => e.target === ref.current && fechar()}>
+      <header>
+        <h3>{visto.nome}</h3>
+        <div>
+          <a className="btn btn-ghost btn-sm" href={visto.url} download={visto.arquivo}>Baixar</a>
+          <button className="btn btn-primary btn-sm" type="button" onClick={fechar} autoFocus>Fechar</button>
+        </div>
+      </header>
+      {visto.pdf
+        ? <iframe src={visto.url} title={visto.nome} />
+        : <img src={visto.url} alt={visto.nome} />}
+    </dialog>
   );
 }
 

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from "rea
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../../api/client";
 import type { Candidato, Etapa, Inscricao } from "../../api/types";
+import { useAuth } from "../../components/auth";
 import { Alert, Hexa, ICON_ESTETOSCOPIO, Spin, useToast } from "../../components/ui";
 import { EtapaConclusao } from "./EtapaConclusao";
 import { EtapaDados } from "./EtapaDados";
@@ -37,23 +38,36 @@ function etapasPermitidas(i: Inscricao): Etapa[] {
   return ETAPAS.slice(0, Math.min(ate, 2) + 1).map((e) => e.id);
 }
 
+/** Candidato só com o nome, para inscrição que já passou do pagamento (o legado não abre mais os dados). */
+function candidatoResumido(i: Inscricao, nome: string): Candidato {
+  return {
+    codCandidato: i.codCandidato, codConcurso: i.codConcurso ?? "", nomeCompleto: nome, dataNascimento: "",
+    tipoDoc: "cpf", emailPessoal: "", celular: "", paisNascimento: null,
+    endereco: { pais: "BRASIL", cep: "", uf: "", municipio: "", endereco: "", numero: "", bairro: "" },
+  };
+}
+
 export function Wizard() {
   const { id = "", etapa } = useParams();
   const nav = useNavigate();
   const toast = useToast();
+  const { pessoa } = useAuth();
   const [insc, setInsc] = useState<Inscricao | null>(null);
   const [candidato, setCandidato] = useState<Candidato | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
   const recarregar = useCallback(async () => {
     try {
-      const [i, c] = await Promise.all([api.inscricao(id), api.candidato(id)]);
+      const i = await api.inscricao(id);
+      // Depois de confirmar o pagamento o legado fecha o formulário de dados (/r/ingresso responde 409). As etapas
+      // que sobram (documentos em consulta e conclusão) só precisam do nome: usa o de quem está logado.
+      const c = i.situacao === "Convocado" ? await api.candidato(id) : candidatoResumido(i, pessoa?.nome ?? "");
       setInsc(i);
       setCandidato(c);
     } catch (e) {
       setErro(e instanceof ApiError ? e.message : "Erro ao carregar a matrícula.");
     }
-  }, [id]);
+  }, [id, pessoa?.nome]);
 
   useEffect(() => {
     recarregar();

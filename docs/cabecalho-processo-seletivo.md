@@ -3,6 +3,10 @@
 Levantado em 29/10/2026 em `https://portal.clariens.com.br/processo-seletivo/home`, só com leitura: páginas
 públicas e uma busca. O formulário de cadastro não foi enviado. Serve de base para o cabeçalho do portal novo.
 
+> **Situação no portal (30/10/2026):** as inscrições não são feitas pelo portal. O menu "Área de interesse" continua
+> lendo os subgrupos do legado, mas aparece **travado** (itens com cadeado, sem link). Para religar,
+> `INSCRICOES_PELO_PORTAL = true` em `frontend/src/components/Shell.tsx`.
+
 ## O que o cabeçalho tem
 
 | Item | Onde | O que faz |

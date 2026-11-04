@@ -2,7 +2,7 @@ import json
 import os
 import re
 
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
 from pydantic import ValidationError
 from starlette.datastructures import UploadFile as StarletteUpload
 
@@ -20,7 +20,14 @@ from app.schemas.documento import (
 )
 from app.schemas.inscricao import Inscricao
 from app.schemas.matricula import ConfirmacaoResultado, Matricula, Questionario
-from app.schemas.pagamento import CupomIn, CupomResultado, OpcoesPagamento, PagamentoIn, PagamentoResultado
+from app.schemas.pagamento import (
+    CupomIn,
+    CupomResultado,
+    OpcoesPagamento,
+    PagamentoIn,
+    PagamentoResultado,
+    Pix,
+)
 from app.services.conferencia import conferir
 from app.services.ia_documentos import IAIndisponivel, LeitorDocumentos
 from app.services.lyceum import LyceumGateway
@@ -63,6 +70,26 @@ async def atualizar_candidato(body: CandidatoUpdate, insc: Inscricao = Insc, use
 @router.get("/inscricoes/{ref}/documentos", response_model=list[DocumentoStatus])
 async def listar_documentos(insc: Inscricao = Insc, user: SessionUser = User, gw: LyceumGateway = Gw):
     return await gw.listar_documentos(user.cod_pessoa, insc)
+
+
+@router.get("/inscricoes/{ref}/documentos/{tipo}/arquivo", response_class=Response,
+            responses={200: {"content": {"image/jpeg": {}, "image/png": {}, "application/pdf": {}},
+                             "description": "Arquivo do documento entregue"},
+                       404: {"description": "Prévia indisponível (o Lyceum não tem o arquivo)"}})
+async def arquivo_documento(tipo: str, insc: Inscricao = Insc, user: SessionUser = User, gw: LyceumGateway = Gw):
+    """Prévia de um documento que o Lyceum já recebeu, para a pessoa ver o que enviou."""
+    if not TIPO_RE.fullmatch(tipo):
+        raise PortalError(404, "Prévia indisponível.")
+    arquivo = await gw.arquivo_documento(user.cod_pessoa, insc, tipo)
+    if not arquivo:
+        raise PortalError(404, "Prévia indisponível.")
+    conteudo, mime = arquivo
+    ext = next((e for e, m in EXTENSOES_ACEITAS.items() if m == mime), "")
+    return Response(conteudo, media_type=mime, headers={
+        "Content-Disposition": f'inline; filename="documento-{tipo}{ext}"',
+        "Cache-Control": "private, no-store",  # documento pessoal: nada de cache compartilhado
+        "X-Content-Type-Options": "nosniff",
+    })
 
 
 @router.post("/inscricoes/{ref}/documentos/{tipo}", response_model=DocumentoStatus)
@@ -191,6 +218,25 @@ async def validar_cupom(body: CupomIn, insc: Inscricao = Insc, user: SessionUser
 async def efetivar_pagamento(body: PagamentoIn, insc: Inscricao = Insc, user: SessionUser = User,
                              gw: LyceumGateway = Gw):
     return await gw.efetivar_pagamento(user.cod_pessoa, insc, body)
+
+
+@router.get("/inscricoes/{ref}/pagamento/boleto", response_class=Response,
+            responses={200: {"content": {"application/pdf": {}}, "description": "Boleto da 1ª parcela (PDF)"},
+                       409: {"description": "Boleto ainda não disponível"}})
+async def boleto_pagamento(insc: Inscricao = Insc, user: SessionUser = User, gw: LyceumGateway = Gw):
+    """Boleto da 1ª parcela, depois de confirmar o pagamento (o Processo Seletivo gera o boleto no banco)."""
+    pdf = await gw.boleto_pagamento(user.cod_pessoa, insc)
+    return Response(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": 'inline; filename="boleto-1a-parcela.pdf"',
+        "Cache-Control": "private, no-store",
+        "X-Content-Type-Options": "nosniff",
+    })
+
+
+@router.post("/inscricoes/{ref}/pagamento/pix", response_model=Pix)
+async def pix_pagamento(insc: Inscricao = Insc, user: SessionUser = User, gw: LyceumGateway = Gw):
+    """PIX da 1ª parcela (QR code e copia e cola), depois de confirmar o pagamento. Gera a cobrança PIX."""
+    return await gw.pix_pagamento(user.cod_pessoa, insc)
 
 
 # ---------- etapa: conclusão ----------

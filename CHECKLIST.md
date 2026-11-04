@@ -19,6 +19,8 @@ irreversível no Lyceum e precisa de aval antes do primeiro envio real. Visão g
 - [x] Tela de login com fundo de tela inteira, logo no card e monitor cardíaco animado
 - [x] Esqueci minha senha pelo fluxo do legado (`/recuperarsenha`)
 - [x] Cabeçalho: logo, Área de interesse (subgrupos lidos do legado) e Cadastre-se
+- [x] Área de interesse travada (itens com cadeado, sem link; inscrições fora do portal)
+- [x] Login com CPF com ou sem pontuação (o servidor normaliza)
 - [x] Mensagem clara quando o Processo Seletivo está fora do ar
 - [ ] Recuperação de senha testada de verdade com uma conta autorizada (envia e-mail ao dono)
 - [ ] Rate limit no login e na recuperação de senha
@@ -31,6 +33,7 @@ irreversível no Lyceum e precisa de aval antes do primeiro envio real. Visão g
 
 ## Fase 3 — Etapa Documentos
 - [x] Lista de documentos lida da página real; obrigatórios conforme o processo
+- [x] Prévia dos documentos enviados (download do legado) e visor; "prévia indisponível" quando o Lyceum não tem o arquivo
 - [x] Conferência por IA (Claude) no servidor; OCR do navegador como reserva; WEBP aceito
 - [x] Anexos guardados no navegador (IndexedDB) com selo assinado; nada no servidor entre requisições
 - [x] Um documento por chamada: o primeiro pela rota do form (`uploadDocumentosPorProcesso`), sozinho; os seguintes por `documentosCandidato/upload`
@@ -47,7 +50,11 @@ irreversível no Lyceum e precisa de aval antes do primeiro envio real. Visão g
 - [x] Planos lidos da página real (Boleto, PIX; Cartão "Em breve"); "6 mensalidades no semestre"
 - [x] Cupom validado no legado (`validarvoucher`)
 - [x] Confirmação monta o corpo do `efetivar.json`; validada em simulação
-- [ ] Primeiro `efetivar.json` real em DEV (cria a matrícula) — **(autorização)**
+- [x] Mapa do legado: boleto, PIX, cartão, cartões salvos e tela de término (`docs/pagamento-legado.md`)
+- [x] Depois de confirmar: boleto (PDF) e PIX (QR + copia e cola) na tela (rotas `pagamento/boleto` e `pagamento/pix`)
+- [x] Boleto e PIX validados em DEV depois do primeiro `efetivar.json` real (04/11/2026)
+- [ ] Cartão com o formulário do legado (depende da decisão de PCI)
+- [x] Primeiro `efetivar.json` real em DEV (04/11/2026; inscrição de teste 2027100000285 agora Pré-Matriculado)
 - [ ] Valores das parcelas e total (fonte a definir: `GET /v2/tabela/concursos` ou API de planos)
 - [ ] Cupom de 100% (plano `N:N:N:1`, "Bolsa integral")
 - [ ] Cobrança real depois de confirmar (boleto/PIX da 1ª parcela via `/r/terminoIngresso`)

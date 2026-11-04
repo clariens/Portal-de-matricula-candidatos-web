@@ -489,6 +489,62 @@
         }
       }
     },
+    "/api/v1/inscricoes/{ref}/documentos/{tipo}/arquivo": {
+      "get": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Arquivo Documento",
+        "description": "Prévia de um documento que o Lyceum já recebeu, para a pessoa ver o que enviou.",
+        "operationId": "arquivo_documento_api_v1_inscricoes__ref__documentos__tipo__arquivo_get",
+        "parameters": [
+          {
+            "name": "tipo",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Tipo"
+            }
+          },
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{20,120}$",
+              "description": "Referência opaca da inscrição (campo `ref` do histórico)",
+              "title": "Ref"
+            },
+            "description": "Referência opaca da inscrição (campo `ref` do histórico)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Arquivo do documento entregue",
+            "content": {
+              "image/jpeg": {},
+              "image/png": {},
+              "application/pdf": {}
+            }
+          },
+          "404": {
+            "description": "Prévia indisponível (o Lyceum não tem o arquivo)"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/inscricoes/{ref}/documentos/{tipo}": {
       "post": {
         "tags": [
@@ -560,7 +616,7 @@
           "inscricoes"
         ],
         "summary": "Enviar Documentos",
-        "description": "Envia ao Lyceum os documentos que o navegador guardou (arquivo + selo de cada um), com resultado por\ndocumento: o que estiver certo segue e o que for recusado volta em `recusados` (código → motivo).\nNo legado o primeiro envio FINALIZA a inscrição.",
+        "description": "Envia ao Lyceum os documentos que o navegador guardou (arquivo + selo de cada um), com resultado por\ndocumento: o que estiver certo segue e o que for recusado volta em `recusados` (código → motivo).\nAceita N documentos, mas o navegador manda UM por chamada (progresso na tela e requisições pequenas).\nNo legado o primeiro envio FINALIZA a inscrição.",
         "operationId": "enviar_documentos_api_v1_inscricoes__ref__envio_documentos_post",
         "parameters": [
           {
@@ -748,6 +804,97 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PagamentoResultado"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inscricoes/{ref}/pagamento/boleto": {
+      "get": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Boleto Pagamento",
+        "description": "Boleto da 1ª parcela, depois de confirmar o pagamento (o Processo Seletivo gera o boleto no banco).",
+        "operationId": "boleto_pagamento_api_v1_inscricoes__ref__pagamento_boleto_get",
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{20,120}$",
+              "description": "Referência opaca da inscrição (campo `ref` do histórico)",
+              "title": "Ref"
+            },
+            "description": "Referência opaca da inscrição (campo `ref` do histórico)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Boleto da 1ª parcela (PDF)",
+            "content": {
+              "application/pdf": {}
+            }
+          },
+          "409": {
+            "description": "Boleto ainda não disponível"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/inscricoes/{ref}/pagamento/pix": {
+      "post": {
+        "tags": [
+          "inscricoes"
+        ],
+        "summary": "Pix Pagamento",
+        "description": "PIX da 1ª parcela (QR code e copia e cola), depois de confirmar o pagamento. Gera a cobrança PIX.",
+        "operationId": "pix_pagamento_api_v1_inscricoes__ref__pagamento_pix_post",
+        "parameters": [
+          {
+            "name": "ref",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{20,120}$",
+              "description": "Referência opaca da inscrição (campo `ref` do histórico)",
+              "title": "Ref"
+            },
+            "description": "Referência opaca da inscrição (campo `ref` do histórico)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Pix"
                 }
               }
             }
@@ -1986,7 +2133,7 @@
             "maxLength": 120,
             "minLength": 3,
             "title": "Login",
-            "description": "E-mail ou CPF"
+            "description": "E-mail ou CPF (com ou sem pontuação)"
           },
           "senha": {
             "type": "string",
@@ -2349,6 +2496,48 @@
           "nome"
         ],
         "title": "Pessoa"
+      },
+      "Pix": {
+        "properties": {
+          "qrCode": {
+            "type": "string",
+            "title": "Qrcode",
+            "description": "Imagem do QR code (data URI)"
+          },
+          "copiaECola": {
+            "type": "string",
+            "title": "Copiaecola"
+          },
+          "recebedor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recebedor"
+          },
+          "valor": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valor"
+          }
+        },
+        "type": "object",
+        "required": [
+          "qrCode",
+          "copiaECola"
+        ],
+        "title": "Pix",
+        "description": "PIX da 1ª parcela, gerado pelo Processo Seletivo depois de confirmar o pagamento."
       },
       "Plano": {
         "properties": {

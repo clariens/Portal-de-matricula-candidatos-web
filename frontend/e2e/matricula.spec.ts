@@ -26,11 +26,14 @@ test("fluxo completo de matrícula (dublê do Lyceum)", async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/login/);
 
-  // cabeçalho: área de interesse (subgrupos do Processo Seletivo) e cadastre-se; "entrar" fica só no card
+  // cabeçalho: área de interesse (subgrupos do Processo Seletivo) com os itens travados, e cadastre-se
   await page.getByRole("button", { name: "Área de interesse" }).click();
-  await expect(page.getByRole("link", { name: "Enem" })).toHaveAttribute("href", /\/processo-seletivo\/subgrupo\?id=16$/);
+  const menu = page.locator("#menu-areas");
+  await expect(menu).toContainText("As inscrições não são feitas por este portal.");
+  await expect(menu.locator(".areas-item", { hasText: "Enem" })).toHaveAttribute("aria-disabled", "true");
+  await expect(menu.getByRole("link")).toHaveCount(0); // nenhum item leva a outra página
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("link", { name: "Enem" })).toHaveCount(0);
+  await expect(menu).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Cadastre-se" })).toHaveAttribute("href", /\/cadastro\?et=4$/);
 
   // esqueci minha senha: o Processo Seletivo envia as instruções
@@ -199,6 +202,22 @@ test("fluxo completo de matrícula (dublê do Lyceum)", async ({ page }) => {
 
   // etapa 3: pagamento
   await expect(page.getByRole("heading", { name: "Pagamento", exact: true })).toBeVisible();
+
+  // prévia: voltando à etapa Documentos (como quem entra de novo depois), o que foi enviado aparece com a
+  // miniatura do arquivo que o Lyceum guardou e abre no visor
+  const urlPagamento = page.url();
+  await page.goto(urlPagamento.replace(/\/pagamento$/, "/documentos"));
+  await expect(page.getByRole("heading", { name: "Seus documentos" })).toBeVisible();
+  await expect(cpfRow.locator(".chip")).toContainText("Enviado");
+  await expect(cpfRow.locator(".thumb-btn img")).toBeVisible();
+  await cpfRow.getByRole("button", { name: "Ver CPF" }).click();
+  const visor = page.locator("dialog.visor");
+  await expect(visor.getByRole("img", { name: "CPF" })).toBeVisible();
+  await expect(visor.getByRole("link", { name: "Baixar" })).toHaveAttribute("download", /^CPF\./);
+  await page.keyboard.press("Escape");
+  await expect(visor).toHaveCount(0);
+  await page.goto(urlPagamento);
+  await expect(page.getByRole("heading", { name: "Pagamento", exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: /Cartão de crédito/ })).toBeDisabled();
   await page.getByLabel("Código do cupom").fill("XYZ");
   await page.getByRole("button", { name: "Aplicar" }).click();
@@ -220,7 +239,10 @@ test("fluxo completo de matrícula (dublê do Lyceum)", async ({ page }) => {
   // etapa 4: conclusão
   await expect(page.getByRole("heading", { name: "Matrícula concluída" })).toBeVisible();
   await expect(page.locator(".mat")).toContainText("2716520002");
-  await expect(page.getByText("O boleto da 1ª parcela foi enviado para o seu e-mail.")).toBeVisible();
+  // 1ª parcela: o boleto é gerado na hora e abre ou baixa como PDF
+  await expect(page.getByText("O boleto da 1ª parcela está pronto.")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Abrir boleto" })).toHaveAttribute("href", /^blob:/);
+  await expect(page.getByRole("link", { name: "Baixar" })).toHaveAttribute("download", "boleto-1a-parcela.pdf");
   await expect(page.locator(".disc li")).toHaveCount(6);
   await page.getByRole("button", { name: "Concluir e ir para minhas inscrições" }).click();
   await expect(page.getByText("Questionário socioeconômico do ingressante")).toBeVisible();

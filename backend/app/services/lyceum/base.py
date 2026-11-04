@@ -14,7 +14,7 @@ from app.schemas.candidato import Candidato, CandidatoUpdate, CepResultado, Muni
 from app.schemas.documento import Anexo, DocumentoStatus, EnvioDocumentosResultado, OcrResultado
 from app.schemas.inscricao import Inscricao
 from app.schemas.matricula import ConfirmacaoResultado, Matricula, Questionario
-from app.schemas.pagamento import CupomResultado, OpcoesPagamento, PagamentoIn, PagamentoResultado
+from app.schemas.pagamento import CupomResultado, OpcoesPagamento, PagamentoIn, PagamentoResultado, Pix
 from app.schemas.publico import Cabecalho
 
 
@@ -48,14 +48,19 @@ class LyceumGateway(Protocol):
         mime: str,
         ocr: OcrResultado | None,
     ) -> tuple[DocumentoStatus, Anexo]: ...
-    # Envia os documentos que o navegador devolveu (o legado recebe tudo num único POST e FINALIZA a inscrição)
+    # Envia os documentos que o navegador devolveu (um por requisição ao Lyceum; o primeiro FINALIZA a inscrição)
     async def enviar_documentos(self, cod_pessoa: str, insc: Inscricao,
                                 anexos: dict[str, Anexo]) -> EnvioDocumentosResultado: ...
+    # Arquivo de um documento já entregue (conteúdo, mime), para a prévia; None se o Lyceum não tem o arquivo
+    async def arquivo_documento(self, cod_pessoa: str, insc: Inscricao, tipo: str) -> tuple[bytes, str] | None: ...
 
     # etapa 2 — pagamento
     async def opcoes_pagamento(self, cod_pessoa: str, insc: Inscricao) -> OpcoesPagamento: ...
     async def validar_cupom(self, cod_pessoa: str, insc: Inscricao, codigo: str) -> CupomResultado: ...
     async def efetivar_pagamento(self, cod_pessoa: str, insc: Inscricao, dados: PagamentoIn) -> PagamentoResultado: ...
+    # Cobrança da 1ª parcela, depois de confirmar (geram a cobrança no banco: não são só leitura)
+    async def boleto_pagamento(self, cod_pessoa: str, insc: Inscricao) -> bytes: ...
+    async def pix_pagamento(self, cod_pessoa: str, insc: Inscricao) -> Pix: ...
 
     # etapa 3 — conclusão
     async def obter_matricula(self, cod_pessoa: str, insc: Inscricao) -> Matricula: ...

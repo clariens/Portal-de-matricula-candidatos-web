@@ -34,6 +34,13 @@ Quem tem o Basic consegue agir em nome de **qualquer** candidato, porque o Lyceu
 - O selo assinado (`app/core/selo.py`) impede trocar o arquivo depois da conferência ou forjar o resultado da IA.
 - CSRF: SameSite=Lax mais exigência de `X-Requested-With` em métodos mutáveis. Um formulário cross-site não consegue enviar esse header.
 
+## Prévia dos documentos enviados
+- O arquivo vem do legado na sessão do próprio candidato. O `id` do documento é lido da tela "Documentos Ingresso"
+  no servidor, nunca recebido do navegador, e a inscrição passa pela mesma checagem de dona (`inscricao_autorizada`).
+- Resposta com `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff` e `Content-Disposition: inline`.
+  O tipo é decidido pela assinatura do arquivo (JPEG, PNG ou PDF); qualquer outra coisa vira "prévia indisponível".
+- No navegador, a prévia fica só em memória (URL de objeto), liberada ao sair da etapa. Nada vai para o IndexedDB.
+
 ## Upload
 - Extensões aceitas: pdf, jpg, jpeg, png. A **assinatura mágica** do conteúdo é conferida (não basta a extensão).
 - Limite de `PORTAL_UPLOAD_MAX_MB` (10 MB), lido com teto para não carregar arquivos maiores em memória.

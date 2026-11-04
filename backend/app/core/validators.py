@@ -6,6 +6,18 @@ def digits(v: str | None) -> str:
     return re.sub(r"\D", "", v or "")
 
 
+_CPF_DIGITADO_RE = re.compile(r"^[\d.\-\s]+$")
+
+
+def login_normalizado(v: str) -> str:
+    """Login como o Processo Seletivo espera: CPF colado com pontuação ("123.456.789-09") vira só os dígitos.
+    E-mail, RG e passaporte seguem como foram digitados (só sem espaços nas pontas)."""
+    v = v.strip()
+    if _CPF_DIGITADO_RE.fullmatch(v) and len(digits(v)) == 11:
+        return digits(v)
+    return v
+
+
 def cpf_valido(v: str | None) -> bool:
     c = digits(v)
     if len(c) != 11 or c == c[0] * 11:

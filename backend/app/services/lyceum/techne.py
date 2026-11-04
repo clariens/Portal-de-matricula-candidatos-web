@@ -52,6 +52,9 @@ ENDPOINTS: dict[str, str | None] = {
     "listar_municipios": None,
     "listar_documentos": None,
     "enviar_documento": None,
+    "arquivo_documento": None,
+    "boleto_pagamento": None,
+    "pix_pagamento": None,  # 403 para a conta de serviço em DEV (30/10/2026)
     "opcoes_pagamento": None,
     "validar_cupom": None,
     "efetivar_pagamento": None,
@@ -68,6 +71,9 @@ NECESSIDADE = {
     "listar_municipios": "lista de municípios por UF",
     "listar_documentos": "tipos de documento do processo",
     "enviar_documento": "upload de documento do ingresso",
+    "arquivo_documento": "download de documento entregue",
+    "boleto_pagamento": "boleto da 1ª parcela",
+    "pix_pagamento": "PIX da 1ª parcela",
     "opcoes_pagamento": "planos de pagamento do concurso",
     "validar_cupom": "validação de cupom",
     "efetivar_pagamento": "efetivação do pagamento",
@@ -312,6 +318,11 @@ class TechneGateway:
                                             nome_arquivo, conteudo, mime, ocr)
         self._endpoint("enviar_documento")
 
+    async def arquivo_documento(self, cod_pessoa, insc, tipo):
+        if self._usa_legado:
+            return await self.legado.arquivo_entregue(sessao_atual.get(), insc.cod_candidato, insc.cod_concurso, tipo)
+        self._endpoint("arquivo_documento")
+
     async def enviar_documentos(self, cod_pessoa, insc, anexos):
         if self._usa_legado:
             self._exigir_convocado(insc)
@@ -343,6 +354,22 @@ class TechneGateway:
             return await self.legado.efetivar_pagamento(sessao_atual.get(), insc.cod_candidato, dados,
                                                         simular=self.s.lyceum_pagamento_modo != "enviar")
         self._endpoint("efetivar_pagamento")
+
+    def _exigir_cobranca_real(self):
+        if self.s.lyceum_pagamento_modo != "enviar":
+            raise PortalError(409, "Pagamento em simulação: não há boleto nem PIX gerados.")
+
+    async def boleto_pagamento(self, cod_pessoa, insc):
+        if self._usa_legado:
+            self._exigir_cobranca_real()
+            return await self.legado.boleto(sessao_atual.get(), insc.cod_candidato, insc.cod_concurso)
+        self._endpoint("boleto_pagamento")
+
+    async def pix_pagamento(self, cod_pessoa, insc):
+        if self._usa_legado:
+            self._exigir_cobranca_real()
+            return await self.legado.pix(sessao_atual.get(), insc.cod_candidato, insc.cod_concurso)
+        self._endpoint("pix_pagamento")
 
     async def obter_matricula(self, cod_pessoa, insc):
         self._endpoint("obter_matricula")

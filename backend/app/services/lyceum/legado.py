@@ -75,11 +75,12 @@ from app.schemas.pagamento import (
     OpcoesPagamento,
     PagamentoIn,
     PagamentoResultado,
+    Pix,
     Plano,
 )
 from app.schemas.publico import AreaInteresse, Cabecalho, LinkLegado
 from app.services.imagens import preparar_imagem
-from app.services.lyceum.catalogo import REGRA_POR_TIPO, TIPOS_DOCUMENTO
+from app.services.lyceum.catalogo import MAGIC, REGRA_POR_TIPO, TIPOS_DOCUMENTO
 from app.services.lyceum.mappers import normalizar_situacao
 
 log = logging.getLogger("lyceum")
@@ -504,7 +505,19 @@ class ClienteLegado:
                                       mensagem="Pagamento simulado (ambiente de desenvolvimento): nada foi enviado "
                                                "ao Lyceum e a matrícula não foi criada.")
         log.warning("[lyceum-legado] ENVIO REAL POST /r/pagamentoIngresso/efetivar.json: %s", resumo)
-        await self.post_json(sid, "/r/pagamentoIngresso/efetivar.json", corpo)
+        try:
+            # o legado leva mais de 20 s para criar a matrícula (visto em DEV em 04/11/2026)
+            r = await self._req(sid, "POST", "/r/pagamentoIngresso/efetivar.json", json=corpo, ajax=True,
+                                timeout=EFETIVAR_TIMEOUT)
+            self._retorno(r, "/r/pagamentoIngresso/efetivar.json")
+        except LyceumIndisponivel:
+            # Sem resposta não quer dizer que não gravou: em DEV o legado criou a matrícula mesmo assim. Confere no
+            # histórico antes de dizer que falhou (e nunca reenviar sozinho: duplicaria a cobrança).
+            self.invalidar_historico(sid)
+            insc = next((i for i in await self.historico(sid) if i.cod_candidato == cod_candidato), None)
+            if not insc or insc.situacao == "Convocado":
+                raise
+            log.warning("[lyceum-legado] efetivar.json sem resposta, mas o histórico mostra %s", insc.situacao)
         self.invalidar_historico(sid)
         self.avancar_etapa(sid, cod_candidato, "conclusao")
         return PagamentoResultado(situacao="Pré-Matriculado", cobranca=cobranca, mensagem="Pagamento registrado.")
@@ -541,6 +554,73 @@ class ClienteLegado:
                           "inscrMunicipal": r.inscricao_municipal})
         return {k: (None if v in (None, "") else re.sub(r"</?[^>]+(>|$)", "", str(v))) for k, v in p.items()}
 
+    # ---------- cobrança da 1ª parcela: boleto e PIX (depois do efetivar.json) ----------
+    async def boleto(self, sid: str | None, cod_candidato: str, cod_concurso: str) -> bytes:
+        """PDF do boleto. Como a tela de término do legado (r/terminoIngresso/gerarBoleto, na sessão que acabou de
+        confirmar); se a sessão não estiver no término, como o Histórico (r/historico/gerarBoleto). Gera o boleto
+        no banco: não é só leitura."""
+        tentativas = (("/r/terminoIngresso/gerarBoleto", None),
+                      ("/r/historico/gerarBoleto", {"codConcurso": cod_concurso, "codCandidato": cod_candidato}))
+        await self.get(sid, "/r/terminoIngresso")  # o gerarBoleto do término usa a inscrição aberta nessa tela
+        for caminho, params in tentativas:
+            try:
+                item = await self.get_json(sid, caminho, params)
+            except PortalError as e:
+                log.warning("[lyceum-legado] boleto por %s recusado: %s", caminho, e.mensagem)
+                continue
+            pdf = _pdf_base64(item)
+            log.warning("[lyceum-legado] boleto por %s: %s", caminho, f"{len(pdf)} bytes" if pdf else "sem PDF")
+            if pdf:
+                return pdf
+        raise PortalError(409, "O boleto ainda não está disponível. Tente de novo em alguns minutos.")
+
+    async def pix(self, sid: str | None, cod_candidato: str, cod_concurso: str) -> Pix:
+        """PIX da 1ª parcela, como a tela de término do legado: valor e cobrança lidos do botão do PIX da página
+        (openModalPix(candidato, concurso, valor, idCobranca)) e POST r/historico/geraPix. Gera a cobrança PIX."""
+        cobranca = await self._cobranca_pix(sid, cod_candidato, cod_concurso)
+        if not cobranca:
+            raise PortalError(409, "O PIX ainda não está disponível para esta inscrição. Tente de novo em alguns minutos.")
+        valor, id_cobranca = cobranca
+        corpo = {"candidato": cod_candidato, "concurso": cod_concurso, "valorTotal": valor,
+                 "listaDeCobrancas": [int(id_cobranca)]}
+        item = await self.post_json(sid, "/r/historico/geraPix", corpo)
+        dados = item[0] if isinstance(item, list) and item and isinstance(item[0], dict) else {}
+        img = re.search(r'src\s*=\s*["\']([^"\']+)["\']', str(dados.get("tagHtml") or ""))
+        qr = img[1] if img else ""
+        if qr and not qr.startswith("data:image/"):
+            qr = await self._imagem_data_uri(sid, html.unescape(qr))
+        if not qr or not dados.get("payload"):
+            raise PortalError(502, "O Processo Seletivo não devolveu o PIX. Tente de novo em alguns minutos.")
+        log.warning("[lyceum-legado] PIX gerado (cobrança %s)", id_cobranca)
+        return Pix(qr_code=qr, copia_e_cola=str(dados["payload"]).strip(),
+                   recebedor=_vazio(str(dados.get("recebedor") or "")) or None, valor=valor)
+
+    async def _cobranca_pix(self, sid: str | None, cod_candidato: str, cod_concurso: str) -> tuple[float, str] | None:
+        """Valor e id da cobrança para o geraPix. Na sessão que acabou de confirmar, vêm do botão do PIX da tela de
+        término (openModalPix). Numa sessão nova o término redireciona (302) e eles vêm do botão de pagamento do
+        Histórico: openModalWindown(oferta, pedido, valor, parcelas, candidato, concurso, …, idCobranca)."""
+        r = await self.get(sid, "/r/terminoIngresso")
+        m = _PIX_RE.search(r.text) if r.status_code == 200 else None
+        if m and m["cand"] == cod_candidato:
+            return float(m["valor"].replace(",", ".")), m["cobranca"]
+        h = await self.get(sid, "/r/historico")
+        for chamada in _MODAL_PAGAMENTO_RE.findall(h.text if h.status_code == 200 else ""):
+            a = [x.strip().strip("'\"") for x in chamada.split(",")]
+            if (len(a) >= 13 and a[4] == cod_candidato and a[5] == cod_concurso and a[12].isdigit()
+                    and re.fullmatch(r"\d+(?:[.,]\d+)?", a[2])):
+                return float(a[2].replace(",", ".")), a[12]
+        log.warning("[lyceum-legado] cobrança para o PIX não encontrada (término HTTP %s)", r.status_code)
+        return None
+
+    async def _imagem_data_uri(self, sid: str | None, url: str) -> str:
+        """QR code vindo como endereço de imagem: baixa na sessão do candidato e devolve como data URI."""
+        caminho = url.split("/processo-seletivo", 1)[-1] if url.startswith(("/", "http")) else "/" + url
+        r = await self.get(sid, caminho)
+        tipo = r.headers.get("content-type", "").split(";")[0]
+        if r.status_code != 200 or not tipo.startswith("image/"):
+            return ""
+        return f"data:{tipo};base64,{base64.b64encode(r.content).decode()}"
+
     # ---------- etapa 1b: documentos ----------
     async def documentos_exigidos(self, sid: str | None) -> list[TipoDocumento]:
         """Lista de documentos do processo, lida da página real (muda por concurso). Cache curto por sessão."""
@@ -561,6 +641,25 @@ class ClienteLegado:
         q = base64.b64encode(f"{cod_concurso}separadorb64{cod_candidato}".encode()).decode()
         r = await self.get(sid, "/r/documentosPorProcessoCandidato", params={"q": q})
         return parse_documentos_entregues(r.text) if r.status_code == 200 else {}
+
+    async def arquivo_entregue(self, sid: str | None, cod_candidato: str, cod_concurso: str,
+                               tipo: str) -> tuple[bytes, str] | None:
+        """Arquivo de um documento já entregue, para a prévia (coluna Download da tela "Documentos Ingresso").
+
+        O id do documento vem da própria tela, nunca do navegador. O tipo do arquivo é decidido pela assinatura
+        (o legado responde application/octet-stream). Quando o Lyceum guardou o registro sem o arquivo, o legado
+        devolve uma página de erro ("Byte array must not be null", visto em DEV em 30/10/2026): devolve None."""
+        e = (await self.documentos_entregues(sid, cod_candidato, cod_concurso)).get(tipo)
+        if not e or not e.id.isdigit():
+            return None
+        q = base64.b64encode(f"{cod_concurso}separadorb64{cod_candidato}".encode()).decode()
+        r = await self.get(sid, "/r/documentosCandidato/download", params={"q": q, "id": e.id})
+        mime = next((m for m, assinaturas in MAGIC.items() if any(r.content.startswith(a) for a in assinaturas)), None)
+        if r.status_code != 200 or not mime:
+            log.warning("[lyceum-legado] prévia do documento %s indisponível (HTTP %s, %s)", tipo, r.status_code,
+                        r.headers.get("content-type", "-"))
+            return None
+        return r.content, mime
 
     async def documentos(self, sid: str | None, cod_candidato: str, cod_concurso: str) -> list[DocumentoStatus]:
         entregues = await self.documentos_entregues(sid, cod_candidato, cod_concurso)
@@ -940,9 +1039,10 @@ class Entregue:
     aceito: str  # "Pendente" | "Sim" | "Não"
     motivo: str | None
     data: str | None
+    id: str = ""  # id do documento entregue no Lyceum (usado no download do arquivo)
 
 
-_ENTREGUE_COD_RE = re.compile(r"openModalWindown\('[^']*',\s*'([^']+)'")
+_ENTREGUE_COD_RE = re.compile(r"openModalWindown\('([^']*)',\s*'([^']+)'")
 _ENTREGUE_COL_RE = re.compile(r'<td[^>]*class="[^"]*col-data-([a-z-]+)[^"]*"[^>]*>(.*?)</td>', re.DOTALL | re.IGNORECASE)
 
 
@@ -954,9 +1054,9 @@ def parse_documentos_entregues(pagina: str) -> dict[str, Entregue]:
             continue
         col = {k.lower(): v for k, v in _ENTREGUE_COL_RE.findall(tr)}
         aceito = re.search(r'title="([^"]*)"', col.get("aceito", ""))
-        itens[cod[1]] = Entregue(aceito=html.unescape(aceito[1]).strip() if aceito else "Pendente",
+        itens[cod[2]] = Entregue(aceito=html.unescape(aceito[1]).strip() if aceito else "Pendente",
                                  motivo=_vazio(_texto(col.get("motivo-recusa", ""))) or None,
-                                 data=_vazio(_texto(col.get("data-entrega", ""))) or None)
+                                 data=_vazio(_texto(col.get("data-entrega", ""))) or None, id=cod[1])
     return itens
 
 
@@ -999,6 +1099,29 @@ def mensagem_envio(nomes: dict[str, str], recusados: dict[str, str]) -> str:
 
 
 # ---------- etapa 2: /r/pagamentoIngresso ----------
+# botão do PIX na tela de término: openModalPix(codCandidato, codConcurso, valor, idCobranca)
+_PIX_RE = re.compile(r"openModalPix\(\s*['\"]?(?P<cand>\d+)['\"]?\s*,\s*['\"]?(?P<conc>\d+)['\"]?\s*,\s*"
+                     r"['\"]?(?P<valor>\d+(?:[.,]\d+)?)['\"]?\s*,\s*['\"]?(?P<cobranca>\d+)['\"]?\s*\)")
+
+
+# botão de pagamento do Histórico (historico.js): openModalWindown(idOferta, numPedidoCartao, valor, parcelas,
+# codCandidato, codConcurso, podeBoletar, podeCartao, boletoOuCartao, idBoleto, permiteBoleto, permitePix, idCobranca)
+_MODAL_PAGAMENTO_RE = re.compile(r"openModalWindown\(([^)]*)\)")
+EFETIVAR_TIMEOUT = 120.0
+
+
+def _pdf_base64(item: object) -> bytes | None:
+    """item[0] do gerarBoleto: o PDF em base64 (o legado abre com atob + Blob application/pdf)."""
+    dado = item[0] if isinstance(item, list) and item else item
+    if not isinstance(dado, str) or not dado.strip():
+        return None
+    try:
+        pdf = base64.b64decode(dado.strip(), validate=False)
+    except ValueError:
+        return None
+    return pdf if pdf.startswith(b"%PDF") else None
+
+
 FORMAS = {"BOLETO": "Boleto", "PIX": "PIX", "CARTAO": "Cartao", "CARTÃO": "Cartao"}
 NOMES_FORMA = {"Boleto": "Boleto", "PIX": "PIX", "Cartao": "Cartão de crédito"}
 INSTRUCOES_PAGAMENTO = {

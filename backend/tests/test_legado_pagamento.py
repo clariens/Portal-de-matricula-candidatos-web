@@ -177,3 +177,25 @@ def test_responsavel_outra_pessoa_exige_campos_do_legado():
         PagamentoIn.model_validate({"tipoResp": "OutraPessoa", "codigoPlano": "N:PG_PIX:PIX:6", "responsavel": {
             "nome": "Maria Rocha", "documento": "52998224725", "dataNascimento": "01/02/1970",
             "endereco": ENDERECO}})
+
+
+# ---------- efetivar.json demorado (DEV, 04/11/2026: o legado criou a matrícula depois de mais de 20 s) ----------
+@respx.mock
+@pytest.mark.parametrize("situacao_depois,gravou", [("Pré-Matriculado", True), ("Convocado", False)])
+async def test_efetivar_sem_resposta_confere_no_historico(situacao_depois, gravou):
+    from app.core.errors import LyceumIndisponivel
+    from tests.test_techne import _linha
+
+    cl = _cliente()
+    rota = respx.post(f"{LEG}/r/pagamentoIngresso/efetivar.json").mock(side_effect=httpx.ReadTimeout("demorou"))
+    respx.get(f"{LEG}/r/historico").mock(return_value=httpx.Response(200, text=(
+        "<table><tbody>" + _linha(CAND, "2027.1 - Processo Seletivo ENEM - IMEPAC - Medicina", situacao_depois,
+                                  "05/11/2026", "Em Aberto") + "</tbody></table>")))
+    dados = PagamentoIn(tipo_resp="Pessoa", codigo_plano="N:PG_PIX:PIX:6")
+    if gravou:
+        r = await cl.efetivar_pagamento(SID, CAND, dados, simular=False)
+        assert r.situacao == "Pré-Matriculado" and cl.sessoes.obter(SID).etapas.get(CAND) == "conclusao"
+    else:
+        with pytest.raises(LyceumIndisponivel):
+            await cl.efetivar_pagamento(SID, CAND, dados, simular=False)
+    assert rota.call_count == 1  # nunca reenvia sozinho: duplicaria a cobrança

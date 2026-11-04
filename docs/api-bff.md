@@ -45,6 +45,9 @@ A documentação interativa fica em **`/api/docs`** (Swagger do FastAPI), e o co
 | GET | `/enderecos/ufs` · `/enderecos/paises` · `/enderecos/ufs/{uf}/municipios` | listas |
 | GET | `/enderecos/cep/{cep}` | → `CepResultado` ou 404 |
 | GET | `/inscricoes/{ref}/documentos` | → `DocumentoStatus[]` |
+| GET | `/inscricoes/{ref}/pagamento/boleto` | PDF do boleto da 1ª parcela, depois de confirmar (`gerarBoleto` do término ou do Histórico; gera o boleto no banco). `no-store`. 409 se ainda não houver cobrança ou se o pagamento estiver em simulação |
+| POST | `/inscricoes/{ref}/pagamento/pix` | → `Pix` (`qrCode` em data URI, `copiaECola`, `recebedor`, `valor`): `geraPix` com o valor e a cobrança do botão do PIX da tela de término. Gera a cobrança PIX. 409 se ainda não houver cobrança |
+| GET | `/inscricoes/{ref}/documentos/{tipo}/arquivo` | arquivo do documento já entregue (JPEG, PNG ou PDF, pela assinatura), para a prévia. `Cache-Control: private, no-store`. 404 "Prévia indisponível" quando o Lyceum não tem o arquivo ou o documento não foi entregue |
 | POST | `/inscricoes/{ref}/documentos/{tipo}` | multipart `arquivo` (+ `ocr` no modo navegador) → `DocumentoStatus` com `analise` e `selo`. **Não guarda o arquivo**: o navegador guarda arquivo + selo |
 | POST | `/inscricoes/{ref}/envio-documentos` | multipart `arquivo_<código>` + `selo_<código>` de cada documento (aceita N; a tela manda **um por chamada**) → `EnvioDocumentosResultado`. Arquivo trocado, selo inválido ou acima do limite de tamanho → 422 com o nome do documento na mensagem e `campos` = `{código: aviso}` de cada documento a trocar (a tela marca essas linhas). Envio parcial → 200 com `recusados` = `{código: motivo}` dos que ficaram para trás |
 | GET | `/inscricoes/{ref}/pagamento/opcoes` | → `OpcoesPagamento` |

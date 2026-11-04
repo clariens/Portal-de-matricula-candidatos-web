@@ -47,6 +47,10 @@ h1,h2{letter-spacing:-.01em}
 .areas-menu ul{list-style:none;margin:0;padding:0}
 .areas-menu a{display:block;padding:8px;border-radius:8px;color:var(--ink);text-decoration:none;font-size:14px}
 .areas-menu a:hover,.areas-menu a:focus-visible{background:var(--brand-soft)}
+/* inscrições fora do portal: itens visíveis, mas travados */
+.areas-aviso{margin:0 0 8px;padding:8px 10px;border-radius:8px;background:var(--surface-2);color:var(--muted);font-size:12px;line-height:1.4}
+.areas-item.bloqueado{display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;color:var(--muted);font-size:14px;opacity:.7;cursor:not-allowed;user-select:none}
+.areas-item .cadeado{flex:none;color:var(--muted)}
 .btn-cadastro{display:inline-block;background:var(--brand);color:var(--brand-ink);border-radius:999px;padding:7px 16px;font-size:13px;font-weight:700;text-decoration:none}
 .btn-cadastro:hover{filter:brightness(1.08)}
 .btn-cadastro[aria-disabled="true"]{opacity:.6;pointer-events:none}
@@ -181,6 +185,20 @@ body.tela-login .topbar{background:rgba(255,255,255,.72);backdrop-filter:blur(8p
 details.raw summary{cursor:pointer;font-size:12px;color:var(--muted)}
 details.raw pre{white-space:pre-wrap;font-family:var(--f-mono);font-size:12px;background:var(--surface-2);padding:10px;border-radius:8px;max-height:200px;overflow:auto;margin:8px 0 0}
 .thumb{width:44px;height:56px;border-radius:6px;object-fit:cover;border:1px solid var(--line);background:var(--surface-2)}
+/* prévia: miniatura clicável (anexo deste navegador ou arquivo que o Lyceum já tem) e visor */
+.thumb-btn{padding:0;border:0;background:none;cursor:zoom-in;border-radius:6px;line-height:0}
+.thumb-btn:hover .thumb,.thumb-btn:focus-visible .thumb{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-soft)}
+.thumb-btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.thumb-pdf{display:grid;place-items:center;font:700 11px/1 var(--f-mono);letter-spacing:.06em;color:var(--bad)}
+.previa-off{color:var(--muted);font-style:italic}
+.visor{width:min(920px,calc(100vw - 32px));height:min(88vh,1100px);padding:0;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);box-shadow:var(--shadow);overflow:hidden}
+.visor[open]{display:flex;flex-direction:column}
+.visor::backdrop{background:rgba(20,18,40,.55)}
+.visor header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.visor header h3{font-size:15px;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.visor header div{display:flex;gap:8px;flex:none}
+.visor img{flex:1;min-height:0;width:100%;object-fit:contain;background:var(--surface-2)}
+.visor iframe{flex:1;width:100%;border:0;background:var(--surface-2)}
 .ocr-intro{display:flex;gap:16px;align-items:center;background:var(--surface-2);border-radius:12px;padding:14px 16px;flex-wrap:wrap}
 .ocr-intro p{flex:1;min-width:220px;font-size:14px}
 .filter{display:flex;gap:6px;flex-wrap:wrap}
@@ -256,6 +274,17 @@ a{color:var(--brand)}
 @keyframes skel{to{background-position:-200% 0}}
 .sub-title{font-size:16px;font-weight:700;margin-top:4px}
 .cobranca{display:grid;gap:4px;font-size:14px}
+/* 1ª parcela: boleto em PDF ou PIX (QR + copia e cola), gerados depois de confirmar */
+.parcela{margin-top:14px;display:grid;gap:10px;font-size:14px}
+.parcela-escolha{margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.parcela-acoes{display:flex;gap:8px;flex-wrap:wrap}
+.parcela-pix{grid-template-columns:auto minmax(0,1fr);align-items:start;gap:18px}
+.pix-qr{width:220px;height:220px;border:1px solid var(--line);border-radius:12px;padding:8px;background:#fff;image-rendering:pixelated}
+.pix-dados{display:grid;gap:8px;min-width:0}
+.pix-dados p{margin:0}
+.pix-codigo{display:grid;gap:4px;font-size:12px;color:var(--muted)}
+.pix-codigo textarea{width:100%;font:13px/1.4 var(--f-mono);color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:8px;resize:none;word-break:break-all}
+@media (max-width:640px){.parcela-pix{grid-template-columns:minmax(0,1fr);justify-items:center}.pix-dados{justify-self:stretch}}
 .cep-group{display:flex;gap:8px;align-items:stretch}
 .btn-icon{padding:0;width:44px;min-width:44px;border-radius:10px}
 .field .hint[aria-live]{min-height:18px}

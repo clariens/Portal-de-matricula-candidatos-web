@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../../api/client";
 import type { Matricula, PagamentoResultado, Questionario } from "../../api/types";
 import { Alert, Chip, Spin } from "../../components/ui";
-import { brl } from "../../lib/format";
 import { COBRANCA_KEY } from "./EtapaPagamento";
+import { PrimeiraParcela } from "./PrimeiraParcela";
 import { useWizard } from "./Wizard";
 
 const CONTRATO: Record<string, [string, string]> = {
@@ -48,6 +48,24 @@ export function EtapaConclusao() {
     }
   }
 
+  if (erro && !m)
+    // os dados da matrícula ainda não vêm do Lyceum real, mas o pagamento da 1ª parcela já pode ser gerado
+    return (
+      <>
+        <Alert tone="info">
+          Pagamento confirmado. Os detalhes da matrícula (contrato e disciplinas) ainda não aparecem neste portal.
+        </Alert>
+        <PrimeiraParcela inscRef={ref} cobranca={cobranca} />
+        <div className="foot">
+          <button className="btn btn-ghost" type="button" onClick={() => nav(`/matricula/${ref}/documentos`)}>
+            Ver documentos
+          </button>
+          <button className="btn btn-primary" type="button" onClick={() => nav("/inscricoes")}>
+            Ir para minhas inscrições
+          </button>
+        </div>
+      </>
+    );
   if (erro) return <Alert>{erro}</Alert>;
   if (!m) return <div className="skel" style={{ minHeight: 320 }} />;
   const [tom, rotulo] = CONTRATO[m.contrato.status];
@@ -73,21 +91,7 @@ export function EtapaConclusao() {
         </div>
       </div>
 
-      {cobranca && (
-        <section className="card panel" style={{ marginTop: 16 }}>
-          <div className="panel-head">
-            <h2>Primeira parcela</h2>
-            <Chip tone="info">{cobranca.formaPagamento === "Cartao" ? "Cartão" : cobranca.formaPagamento}</Chip>
-          </div>
-          <div className="cobranca">
-            <span>
-              {cobranca.valorParcela != null ? <><b>{brl(cobranca.valorParcela)}</b>/mês · {cobranca.numParcelas} mensalidades</> : `${cobranca.numParcelas} mensalidades`}
-              {cobranca.vencimento ? ` · vencimento ${cobranca.vencimento}` : ""}
-            </span>
-            <span className="muted">{cobranca.instrucoes}</span>
-          </div>
-        </section>
-      )}
+      <PrimeiraParcela inscRef={ref} cobranca={cobranca} />
 
       <section className="card panel" style={{ marginTop: 16 }}>
         <div className="panel-head">

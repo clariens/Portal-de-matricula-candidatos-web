@@ -216,6 +216,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/inscricoes/{ref}/documentos/{tipo}/arquivo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Arquivo Documento
+         * @description Prévia de um documento que o Lyceum já recebeu, para a pessoa ver o que enviou.
+         */
+        get: operations["arquivo_documento_api_v1_inscricoes__ref__documentos__tipo__arquivo_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/inscricoes/{ref}/documentos/{tipo}": {
         parameters: {
             query?: never;
@@ -250,6 +270,7 @@ export interface paths {
          * Enviar Documentos
          * @description Envia ao Lyceum os documentos que o navegador guardou (arquivo + selo de cada um), com resultado por
          *     documento: o que estiver certo segue e o que for recusado volta em `recusados` (código → motivo).
+         *     Aceita N documentos, mas o navegador manda UM por chamada (progresso na tela e requisições pequenas).
          *     No legado o primeiro envio FINALIZA a inscrição.
          */
         post: operations["enviar_documentos_api_v1_inscricoes__ref__envio_documentos_post"];
@@ -304,6 +325,46 @@ export interface paths {
         put?: never;
         /** Efetivar Pagamento */
         post: operations["efetivar_pagamento_api_v1_inscricoes__ref__pagamento_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inscricoes/{ref}/pagamento/boleto": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Boleto Pagamento
+         * @description Boleto da 1ª parcela, depois de confirmar o pagamento (o Processo Seletivo gera o boleto no banco).
+         */
+        get: operations["boleto_pagamento_api_v1_inscricoes__ref__pagamento_boleto_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/inscricoes/{ref}/pagamento/pix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pix Pagamento
+         * @description PIX da 1ª parcela (QR code e copia e cola), depois de confirmar o pagamento. Gera a cobrança PIX.
+         */
+        post: operations["pix_pagamento_api_v1_inscricoes__ref__pagamento_pix_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -747,7 +808,7 @@ export interface components {
         LoginIn: {
             /**
              * Login
-             * @description E-mail ou CPF
+             * @description E-mail ou CPF (com ou sem pontuação)
              */
             login: string;
             /** Senha */
@@ -865,6 +926,23 @@ export interface components {
             email?: string | null;
             /** Cpf */
             cpf?: string | null;
+        };
+        /**
+         * Pix
+         * @description PIX da 1ª parcela, gerado pelo Processo Seletivo depois de confirmar o pagamento.
+         */
+        Pix: {
+            /**
+             * Qrcode
+             * @description Imagem do QR code (data URI)
+             */
+            qrCode: string;
+            /** Copiaecola */
+            copiaECola: string;
+            /** Recebedor */
+            recebedor?: string | null;
+            /** Valor */
+            valor?: number | null;
         };
         /** Plano */
         Plano: {
@@ -1341,6 +1419,48 @@ export interface operations {
             };
         };
     };
+    arquivo_documento_api_v1_inscricoes__ref__documentos__tipo__arquivo_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tipo: string;
+                /** @description Referência opaca da inscrição (campo `ref` do histórico) */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Arquivo do documento entregue */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                    "application/pdf": unknown;
+                };
+            };
+            /** @description Prévia indisponível (o Lyceum não tem o arquivo) */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     anexar_documento_api_v1_inscricoes__ref__documentos__tipo__post: {
         parameters: {
             query?: never;
@@ -1505,6 +1625,77 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PagamentoResultado"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    boleto_pagamento_api_v1_inscricoes__ref__pagamento_boleto_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Referência opaca da inscrição (campo `ref` do histórico) */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Boleto da 1ª parcela (PDF) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": unknown;
+                };
+            };
+            /** @description Boleto ainda não disponível */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    pix_pagamento_api_v1_inscricoes__ref__pagamento_pix_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Referência opaca da inscrição (campo `ref` do histórico) */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pix"];
                 };
             };
             /** @description Validation Error */

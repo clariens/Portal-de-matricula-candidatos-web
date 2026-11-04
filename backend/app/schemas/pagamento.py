@@ -141,3 +141,11 @@ class PagamentoResultado(ApiModel):
     cobranca: Cobranca
     simulado: bool = False
     mensagem: str | None = None
+
+
+class Pix(ApiModel):
+    """PIX da 1ª parcela, gerado pelo Processo Seletivo depois de confirmar o pagamento."""
+    qr_code: str = Field(description="Imagem do QR code (data URI)")
+    copia_e_cola: str
+    recebedor: str | None = None
+    valor: float | None = None

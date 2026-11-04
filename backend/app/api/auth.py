@@ -22,7 +22,7 @@ async def login(body: LoginIn, response: Response, gw: LyceumGateway = Depends(g
                 s: Settings = Depends(get_settings)):
     sid = novo_sid()  # amarra a sessão do legado (cookie criptografado) a esta sessão do portal
     sessao_atual.set(sid)
-    pessoa = await gw.autenticar(body.login.strip(), body.senha)
+    pessoa = await gw.autenticar(body.login, body.senha)  # CPF já sem pontuação (LoginIn)
     set_session(response, SessionUser(cod_pessoa=pessoa.cod_pessoa, login=pessoa.login, nome=pessoa.nome,
                                       email=pessoa.email, sid=sid), s)
     return pessoa

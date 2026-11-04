@@ -4,6 +4,21 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
 
 ## [Não lançado]
 ### Adicionado
+- **Boleto e PIX da 1ª parcela.** Depois de confirmar o pagamento, a conclusão mostra o bloco "Primeira parcela":
+  boleto em PDF ("Abrir boleto" e "Baixar") ou PIX com QR code, código copia e cola ("Copiar código"), valor e
+  recebedor, gerados na hora pelo Processo Seletivo (`r/terminoIngresso/gerarBoleto` ou `r/historico/gerarBoleto`;
+  `r/historico/geraPix` com o valor e a cobrança do botão do PIX da tela de término). Rotas
+  `GET /api/v1/inscricoes/{ref}/pagamento/boleto` e `POST …/pagamento/pix`. Cada geração acontece uma vez por página
+  aberta. O bloco aparece mesmo enquanto os dados da matrícula ainda não vêm do Lyceum real.
+- **Prévia dos documentos enviados.** Na etapa Documentos, o que o Lyceum já recebeu aparece com a miniatura do
+  arquivo (ou "PDF") e abre num visor com "Baixar", também quando a pessoa volta depois por outro caminho. O
+  arquivo vem da coluna Download da tela "Documentos Ingresso" do legado (`/r/documentosCandidato/download`), na
+  sessão do candidato, pela rota `GET /api/v1/inscricoes/{ref}/documentos/{tipo}/arquivo` (`no-store`). Quando o
+  Lyceum guardou o registro sem o arquivo (visto em DEV: "Byte array must not be null"), a linha mostra "prévia
+  indisponível". Os anexos ainda não enviados também abrem no visor.
+- **Mapa do pagamento do legado** em `docs/pagamento-legado.md`: boleto (`gerarBoleto`), PIX (`geraPix`: QR,
+  copia e cola, recebedor), campos do cartão, cartões salvos, tela de término e o desenho proposto para a nossa
+  tela. Boleto e PIX só existem depois do `efetivar.json` (a cobrança nasce com a matrícula).
 - **Plano das próximas etapas** em `docs/roadmap.md` (pagamento de ponta a ponta e telas próprias das
   áreas de interesse) e CHECKLIST reorganizado com a situação real.
 - **Cabeçalho com "Área de interesse"** (Graduação → Vestibular Tradicional, Transferência Externa, Enem,
@@ -37,8 +52,21 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
   → 404. O número segue visível na tela para o próprio candidato.
 
 ### Alterado
+- **Área de interesse travada.** As inscrições não são feitas pelo portal: o menu abre, mas os subgrupos aparecem
+  com cadeado, sem link, e um aviso no topo. Para religar, `INSCRICOES_PELO_PORTAL = true` em `Shell.tsx`.
+- **Login aceita CPF com ou sem pontuação.** O servidor tira a pontuação quando o texto tem formato de CPF
+  (11 dígitos), no login e no "esqueci minha senha"; e-mail, RG e passaporte seguem como digitados.
 - Títulos e destaques em Montserrat 700 em todas as telas (a Syne, larga, ficava achatada em negrito). A Syne fica
   só no título de apresentação do login.
+
+### Corrigido (pagamento)
+- **Depois de confirmar, a tela não chegava à conclusão (sem boleto).** O legado fecha o formulário de dados
+  (`/r/ingresso` → 409) quando a inscrição vira "Pré-Matriculado", e o Wizard exigia esses dados para abrir qualquer
+  etapa. Agora, fora de "Convocado", o Wizard usa só o nome de quem está logado (documentos em consulta e conclusão
+  não precisam do resto). O dublê dos testes passou a recusar os dados como o legado.
+- **Confirmação do pagamento demorada dava erro falso.** Em DEV o `efetivar.json` levou mais de 20 s e o portal
+  respondia "Não foi possível conectar", embora a matrícula tivesse sido criada. Agora espera até 120 s e, sem
+  resposta, confere o histórico: se a inscrição já está "Pré-Matriculado", segue como sucesso. Nunca reenvia sozinho.
 
 ### Corrigido (login)
 - O menu "Área de interesse" demorava até 20 s para aparecer com o Processo Seletivo fora: agora desiste em 4 s,

@@ -23,6 +23,32 @@ def _envio(c, trocar=None, tipos=None):
     return c.post(f"/api/v1/inscricoes/{ref(c)}/envio-documentos", files=files or None, data=data, headers=H)
 
 
+def test_login_aceita_cpf_com_ou_sem_pontuacao(client):
+    from app.main import app
+
+    # CPF copiado e colado com pontuação: o Lyceum recebe só os dígitos
+    for digitado in ("123.456.789-09", " 123.456.789-09 ", "12345678909", "123 456 789 09"):
+        r = client.post("/api/v1/auth/login", json={"login": digitado, "senha": "demonstracao"}, headers=H)
+        assert r.status_code == 200, digitado
+        assert app.state.gateway.ultimo_login == "12345678909"
+    # e-mail não é mexido (tem ponto, mas não é CPF)
+    r = client.post("/api/v1/auth/login", json={"login": "ana.rocha@exemplo.com", "senha": "demonstracao"}, headers=H)
+    assert r.status_code == 200 and app.state.gateway.ultimo_login == "ana.rocha@exemplo.com"
+    # recuperar senha também
+    client.post("/api/v1/auth/recuperar-senha", json={"login": "123.456.789-09"}, headers=H)
+    assert app.state.gateway.ultimo_login == "12345678909"
+
+
+def test_login_normalizado():
+    from app.core.validators import login_normalizado
+
+    assert login_normalizado("092.114.221-83") == "09211422183"
+    assert login_normalizado("  09211422183 ") == "09211422183"
+    assert login_normalizado("ana.rocha@exemplo.com") == "ana.rocha@exemplo.com"
+    assert login_normalizado("12.345.678-9") == "12.345.678-9"  # RG: não tem 11 dígitos, fica como veio
+    assert login_normalizado("AB123456") == "AB123456"  # passaporte
+
+
 def test_login_invalido(client):
     r = client.post("/api/v1/auth/login", json={"login": "123.456.789-09", "senha": "x"}, headers=H)
     assert r.status_code == 401
@@ -188,9 +214,19 @@ def test_fluxo_completo(logged):
     cup = logged.post(f"/api/v1/inscricoes/{ref(logged)}/cupons/validar", json={"codigo": "clariens10"}, headers=H).json()
     assert cup["valido"] and cup["planos"][0]["valorParcela"] == 10332.0
 
+    # boleto e PIX só existem depois de confirmar o pagamento
+    assert logged.get(f"/api/v1/inscricoes/{ref(logged)}/pagamento/boleto").status_code == 409
+    assert logged.post(f"/api/v1/inscricoes/{ref(logged)}/pagamento/pix", headers=H).status_code == 409
     r = logged.post(f"/api/v1/inscricoes/{ref(logged)}/pagamento", json={"tipoResp": "Pessoa", "codigoPlano": "N:PG_PIX:PIX:6"},
                     headers=H)
     assert r.status_code == 200 and r.json()["situacao"] == "Pré-Matriculado"
+    # depois de confirmar: PIX (QR + copia e cola) e boleto em PDF
+    pix = logged.post(f"/api/v1/inscricoes/{ref(logged)}/pagamento/pix", headers=H).json()
+    assert pix["qrCode"].startswith("data:image/png;base64,") and pix["copiaECola"].startswith("000201")
+    assert pix["recebedor"] and pix["valor"] == 1234.5
+    bol = logged.get(f"/api/v1/inscricoes/{ref(logged)}/pagamento/boleto")
+    assert bol.status_code == 200 and bol.content.startswith(b"%PDF") and bol.headers["content-type"] == "application/pdf"
+    assert bol.headers["cache-control"] == "private, no-store"
 
     m = logged.get(f"/api/v1/inscricoes/{ref(logged)}/matricula").json()
     assert m["matricula"] == "2716520002" and len(m["disciplinas"]) == 6
@@ -249,3 +285,17 @@ def test_ref_de_outra_sessao_nao_vale(client):
     assert client.get(f"/api/v1/inscricoes/{r}").status_code == 404
     novo = next(i["ref"] for i in client.get("/api/v1/inscricoes").json() if i["codCandidato"] == INSC)
     assert novo != r and client.get(f"/api/v1/inscricoes/{novo}").status_code == 200
+
+
+def test_previa_do_documento_enviado(logged):
+    _upload(logged, "05")
+    assert _envio(logged, tipos=["05"]).status_code == 200
+    r = logged.get(f"/api/v1/inscricoes/{ref(logged)}/documentos/05/arquivo")
+    assert r.status_code == 200 and r.content == PDF and r.headers["content-type"] == "application/pdf"
+    assert r.headers["cache-control"] == "private, no-store" and r.headers["x-content-type-options"] == "nosniff"
+    assert r.headers["content-disposition"] == 'inline; filename="documento-05.pdf"'
+    # não enviado ainda (ou o Lyceum sem o arquivo): 404 com aviso
+    r = logged.get(f"/api/v1/inscricoes/{ref(logged)}/documentos/04/arquivo")
+    assert r.status_code == 404 and r.json()["erro"]["mensagem"] == "Prévia indisponível."
+    # de outra inscrição (referência forjada): 404
+    assert logged.get("/api/v1/inscricoes/" + "A" * 40 + "/documentos/05/arquivo").status_code == 404

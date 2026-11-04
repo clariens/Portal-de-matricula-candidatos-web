@@ -19,6 +19,7 @@ export type Plano = S["Plano"];
 export type CupomResultado = S["CupomResultado"];
 export type PagamentoIn = S["PagamentoIn"];
 export type PagamentoResultado = S["PagamentoResultado"];
+export type Pix = S["Pix"];
 export type Responsavel = S["Responsavel"];
 export type Matricula = S["Matricula"];
 export type ConfirmacaoResultado = S["ConfirmacaoResultado"];

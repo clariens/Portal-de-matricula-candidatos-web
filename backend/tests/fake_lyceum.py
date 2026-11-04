@@ -21,11 +21,15 @@ from app.schemas.pagamento import (
     OpcoesPagamento,
     PagamentoIn,
     PagamentoResultado,
+    Pix,
     Plano,
 )
 from app.services.lyceum.catalogo import TIPOS_DOCUMENTO, UFS
 
 SENHA_DEMO = "demonstracao"
+BOLETO_TESTE = b"%PDF-1.4 boleto de teste\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF"
+# QR code de teste: PNG 1x1 (o legado devolve <img src="data:image/png;base64,...">)
+QR_TESTE = ("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")
 PESSOA = Pessoa(cod_pessoa="767919", login="123.456.789-09", nome="Ana Beatriz Rocha",
                 email="ana.rocha@exemplo.com", cpf="123.456.789-09")
 
@@ -104,6 +108,7 @@ class FakeLyceum:
         self.inscricoes = {i.cod_candidato: i.model_copy(deep=True) for i in INSCRICOES}
         self.candidatos: dict[str, Candidato] = {}
         self.documentos: dict[str, dict[str, DocumentoStatus]] = {}
+        self.arquivos: dict[tuple[str, str], tuple[bytes, str]] = {}  # (inscrição, tipo) → arquivo enviado
         self.pagamentos: dict[str, PagamentoIn] = {}
         self.confirmados: set[str] = set()
         self.cupom: dict[str, str] = {}
@@ -132,6 +137,7 @@ class FakeLyceum:
 
     # ---------- auth ----------
     async def autenticar(self, login: str, senha: str) -> Pessoa:
+        self.ultimo_login = login  # o que chegou ao "Lyceum" (os testes conferem a normalização do CPF)
         ok_login = digits(login) == digits(PESSOA.cpf) or login.strip().lower() == PESSOA.email
         if not ok_login or senha != SENHA_DEMO:
             raise PortalError(401, "Usuário ou senha inválidos.")
@@ -144,6 +150,11 @@ class FakeLyceum:
 
     # ---------- candidato ----------
     async def obter_candidato(self, cod_pessoa: str, insc: Inscricao) -> Candidato:
+        # como o legado: depois do pagamento o formulário de dados (/r/ingresso) fecha (visto em DEV, 04/11/2026)
+        self._exigir_convocado(self.inscricoes[insc.cod_candidato])
+        return self._candidato(insc)
+
+    def _candidato(self, insc: Inscricao) -> Candidato:
         c = self.candidatos.get(insc.cod_candidato)
         if c:
             return c.model_copy(deep=True)
@@ -214,6 +225,7 @@ class FakeLyceum:
             if t.codigo in anexos:  # para o candidato, só "enviado" (aceite é da secretaria)
                 enviados[t.codigo] = DocumentoStatus(**t.model_dump(), status="enviado", arquivo=anexos[t.codigo].nome,
                                                      enviado_em=anexos[t.codigo].em)
+                self.arquivos[(insc.cod_candidato, t.codigo)] = (anexos[t.codigo].conteudo, anexos[t.codigo].mime)
         if all(t.codigo in enviados for t in TIPOS_DOCUMENTO if t.obrigatorio):
             self._avancar(insc.cod_candidato, "pagamento")
         return EnvioDocumentosResultado(simulado=False, mensagem="Documentos enviados.",
@@ -269,13 +281,26 @@ class FakeLyceum:
             forma_pagamento=plano.forma_pagamento, num_parcelas=plano.num_parcelas,
             valor_parcela=plano.valor_parcela, vencimento=venc, instrucoes=instr))
 
+    def _exigir_pagamento(self, insc):
+        if insc.cod_candidato not in self.pagamentos:
+            raise PortalError(409, "O boleto ainda não está disponível. Tente de novo em alguns minutos.")
+
+    async def boleto_pagamento(self, cod_pessoa, insc) -> bytes:
+        self._exigir_pagamento(insc)
+        return BOLETO_TESTE
+
+    async def pix_pagamento(self, cod_pessoa, insc) -> Pix:
+        self._exigir_pagamento(insc)
+        return Pix(qr_code=QR_TESTE, copia_e_cola="00020126580014br.gov.bcb.pix0136teste-portal-matricula5204000053039865802BR6304ABCD",
+                   recebedor="Clariens Educação (teste)", valor=1234.5)
+
     # ---------- conclusão ----------
     async def obter_matricula(self, cod_pessoa, insc) -> Matricula:
         i = self.inscricoes[insc.cod_candidato]
         if i.situacao not in ("Pré-Matriculado", "Matriculado"):
             raise PortalError(409, "A matrícula ainda não foi gerada. Conclua o pagamento.")
         pg = self.pagamentos.get(insc.cod_candidato)
-        cand = await self.obter_candidato(cod_pessoa, insc)
+        cand = self._candidato(insc)
         cel = (pg.responsavel.celular if pg and pg.responsavel else None) or cand.celular
         return Matricula(
             matricula="2716520002", curso="09-Medicina", turma="MED-2027.1-A", periodo="2027.1",
@@ -308,6 +333,11 @@ class FakeLyceum:
         return cabecalho_padrao("https://legado.exemplo/processo-seletivo")
 
     async def recuperar_senha(self, login: str) -> str:
+        self.ultimo_login = login
         if digits(login) == digits(PESSOA.login) or login == PESSOA.email:
             return "Enviamos as instruções para o e-mail an***@exemplo.com."
         raise PortalError(422, "Login não encontrado.")
+
+    async def arquivo_documento(self, cod_pessoa, insc, tipo):
+        """Como o legado: devolve o arquivo que o Lyceum guardou para o documento entregue."""
+        return self.arquivos.get((insc.cod_candidato, tipo))

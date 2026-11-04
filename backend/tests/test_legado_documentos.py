@@ -300,6 +300,7 @@ def test_parse_documentos_entregues():
     e = parse_documentos_entregues(ENTREGUES_HTML)
     assert set(e) == {"02", "04", "05", "03"}
     assert (e["04"].aceito, e["05"].aceito, e["05"].motivo, e["02"].data) == ("Sim", "Não", "Foto ilegível", "22/10/26")
+    assert (e["02"].id, e["04"].id, e["05"].id) == ("51", "52", "53")  # id do download (1º argumento do modal)
     assert parse_documentos_entregues(NENHUM_ENTREGUE) == {}
 
 
@@ -392,3 +393,37 @@ async def test_erros_de_tamanho_do_legado_viram_mensagens_claras(resposta):
         await cl.enviar_documentos(SID, CAND, CONC, cl.anexos_teste, simular=False)
     assert e.value.status == 422 and e.value.mensagem.startswith("CPF não foi enviado.")
     assert "maior que o limite do Lyceum" in e.value.campos["05"]
+
+# ---------- prévia: arquivo de documento entregue (coluna Download de "Documentos Ingresso") ----------
+JPEG = bytes.fromhex("ffd8ffe000104a464946") + b"0" * 100  # assinatura de JPEG/JFIF
+ERRO_BYTE_ARRAY = "<title>&#9888; Erro</title><h3><p>Byte array must not be null</p></h3>"  # visto em DEV, 30/10/2026
+
+
+@respx.mock
+async def test_previa_baixa_o_arquivo_pelo_id_da_tela():
+    cl = _cliente(entregues=ENTREGUES_HTML)
+    download = respx.get(f"{LEG}/r/documentosCandidato/download").mock(return_value=httpx.Response(
+        200, content=JPEG, headers={"content-type": "application/octet-stream;charset=UTF-8"}))
+    conteudo, mime = await cl.arquivo_entregue(SID, CAND, CONC, "04")
+    assert conteudo == JPEG and mime == "image/jpeg"  # tipo pela assinatura, não pelo octet-stream do legado
+    params = download.calls.last.request.url.params
+    assert params["id"] == "52" and params["q"] == "MTM2M3NlcGFyYWRvcmI2NDIwMjcxMDAwMDAyODU="
+
+
+@respx.mock
+@pytest.mark.parametrize("resposta", [
+    httpx.Response(200, text=ERRO_BYTE_ARRAY, headers={"content-type": "text/html;charset=UTF-8"}),
+    httpx.Response(200, content=b"GIF89a....", headers={"content-type": "application/octet-stream"}),
+    httpx.Response(500, text="erro"),
+])
+async def test_previa_indisponivel_quando_o_lyceum_nao_tem_o_arquivo(resposta):
+    cl = _cliente(entregues=ENTREGUES_HTML)
+    respx.get(f"{LEG}/r/documentosCandidato/download").mock(return_value=resposta)
+    assert await cl.arquivo_entregue(SID, CAND, CONC, "04") is None
+
+
+@respx.mock
+async def test_previa_de_documento_nao_entregue_nem_chama_o_download():
+    cl = _cliente(entregues=ENTREGUES_HTML)
+    download = respx.get(f"{LEG}/r/documentosCandidato/download").mock(return_value=httpx.Response(200, content=JPEG))
+    assert await cl.arquivo_entregue(SID, CAND, CONC, "14") is None and not download.called

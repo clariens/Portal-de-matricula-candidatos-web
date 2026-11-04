@@ -5,6 +5,10 @@ import type { Cabecalho } from "../api/types";
 import logo from "../assets/clariens-educacao.png";
 import { useAuth } from "./auth";
 
+/** As inscrições são feitas fora deste portal: o menu de áreas aparece, mas com os itens travados.
+ *  Para voltar a usar os links do Processo Seletivo, basta trocar para `true`. */
+const INSCRICOES_PELO_PORTAL = false;
+
 export function Shell() {
   const { pessoa, sair } = useAuth();
   const nav = useNavigate();
@@ -123,15 +127,23 @@ function AreasDeInteresse({ cab }: { cab: Cabecalho | null }) {
       </button>
       {aberto && cab && (
         <div className="areas-menu" id="menu-areas">
+          {!INSCRICOES_PELO_PORTAL && <p className="areas-aviso">As inscrições não são feitas por este portal.</p>}
           {cab.areas.map((a) => (
             <div key={a.nome}>
               <span className="areas-grupo">{a.nome}</span>
               <ul>
                 {a.itens.map((i) => (
                   <li key={i.url}>
-                    <a href={i.url} target="_blank" rel="noopener noreferrer" onClick={() => setAberto(false)}>
-                      {i.nome}
-                    </a>
+                    {INSCRICOES_PELO_PORTAL ? (
+                      <a href={i.url} target="_blank" rel="noopener noreferrer" onClick={() => setAberto(false)}>
+                        {i.nome}
+                      </a>
+                    ) : (
+                      <span className="areas-item bloqueado" aria-disabled="true">
+                        <Cadeado />
+                        {i.nome}
+                      </span>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -140,5 +152,14 @@ function AreasDeInteresse({ cab }: { cab: Cabecalho | null }) {
         </div>
       )}
     </div>
+  );
+}
+
+function Cadeado() {
+  return (
+    <svg className="cadeado" viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" focusable="false">
+      <rect x="3" y="7" width="10" height="7.5" rx="1.6" fill="currentColor" />
+      <path d="M5.2 7V5.2a2.8 2.8 0 0 1 5.6 0V7" fill="none" stroke="currentColor" strokeWidth="1.6" />
+    </svg>
   );
 }

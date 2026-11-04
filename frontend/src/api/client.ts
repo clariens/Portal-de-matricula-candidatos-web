@@ -12,6 +12,7 @@ import type {
   OpcoesPagamento,
   PagamentoIn,
   PagamentoResultado,
+  Pix,
   Pessoa,
   Questionario,
   Uf,
@@ -50,7 +51,8 @@ function pushLog(l: ApiLog) {
 let onUnauthorized: (() => void) | null = null;
 export const setUnauthorizedHandler = (fn: () => void) => (onUnauthorized = fn);
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+/** Chamada ao BFF. `arquivo`: a resposta de sucesso é um arquivo (Blob); erros continuam vindo em JSON. */
+async function request<T>(method: string, path: string, body?: unknown, arquivo = false): Promise<T> {
   const isForm = body instanceof FormData;
   const t0 = performance.now();
   let res: Response;
@@ -59,7 +61,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
       method,
       credentials: "include",
       headers: {
-        Accept: "application/json",
+        Accept: arquivo ? "image/*, application/pdf, application/json" : "application/json",
         "X-Requested-With": "fetch",
         ...(body !== undefined && !isForm ? { "Content-Type": "application/json" } : {}),
       },
@@ -68,7 +70,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   } catch {
     throw new ApiError(0, "Sem conexão com o servidor. Verifique sua internet e tente de novo.");
   }
-  const data = res.status === 204 ? null : await res.json().catch(() => null);
+  const data = res.status === 204 ? null : arquivo && res.ok ? await res.blob() : await res.json().catch(() => null);
   pushLog({
     t: new Date().toLocaleTimeString("pt-BR"),
     method,
@@ -115,8 +117,10 @@ export const api = {
     if (ocr) fd.append("ocr", JSON.stringify(ocr));
     return request<DocumentoStatus>("POST", `${ins(id)}/documentos/${tipo}`, fd);
   },
-  /** Envia ao Lyceum, de uma vez, os documentos guardados no navegador, cada um com o selo da conferência
-   *  (no legado o primeiro envio finaliza a inscrição). */
+  /** Arquivo de um documento já entregue ao Lyceum, para a prévia (404 quando o Lyceum não tem o arquivo). */
+  arquivoDocumento: (id: string, tipo: string) => request<Blob>("GET", `${ins(id)}/documentos/${tipo}/arquivo`, undefined, true),
+  /** Envia ao Lyceum os documentos guardados no navegador, cada um com o selo da conferência (a tela manda um
+   *  por chamada; no legado o primeiro envio finaliza a inscrição). */
   enviarDocumentos: (id: string, itens: { tipo: string; nome: string; arquivo: Blob; selo: string }[]) => {
     const fd = new FormData();
     for (const i of itens) {
@@ -129,6 +133,10 @@ export const api = {
   opcoesPagamento: (id: string) => request<OpcoesPagamento>("GET", `${ins(id)}/pagamento/opcoes`),
   validarCupom: (id: string, codigo: string) => request<CupomResultado>("POST", `${ins(id)}/cupons/validar`, { codigo }),
   efetivarPagamento: (id: string, p: PagamentoIn) => request<PagamentoResultado>("POST", `${ins(id)}/pagamento`, p),
+  /** Boleto da 1ª parcela em PDF, depois de confirmar (o Processo Seletivo gera o boleto no banco). */
+  boleto: (id: string) => request<Blob>("GET", `${ins(id)}/pagamento/boleto`, undefined, true),
+  /** PIX da 1ª parcela (QR code e copia e cola), depois de confirmar. Gera a cobrança PIX. */
+  pix: (id: string) => request<Pix>("POST", `${ins(id)}/pagamento/pix`),
 
   matricula: (id: string) => request<Matricula>("GET", `${ins(id)}/matricula`),
   confirmarMatricula: (id: string) => request<ConfirmacaoResultado>("POST", `${ins(id)}/matricula/confirmar`),

@@ -16,8 +16,9 @@ BFF segue o **mapa de rotas do Processo Seletivo legado na sessão do próprio c
 | Dados do candidato | legado | `GET /r/ingresso?codCandidato&codConcurso`, `POST /r/ingresso/atualizar.json`; municípios em `/endereco/*` |
 | CEP | ViaCEP + API v2 | `GET /v2/comum/cep/{cep}/enderecos` (código de município do Lyceum) |
 | Documentos exigidos e entregues | legado | `GET /r/documentosPorProcesso`, `GET /r/documentosPorProcessoCandidato?q=` |
+| Prévia de documento entregue | legado | `GET /r/documentosCandidato/download?q=&id=` (id do 1º argumento de `openModalWindown`); sem arquivo, o legado responde página de erro "Byte array must not be null". Na API, `download_documento_pessoa` dá 403 para a conta de serviço |
 | Envio de documentos | legado | um documento por requisição: o primeiro da inscrição por `POST /r/uploadDocumentosPorProcesso` (rota do form, abre a etapa; só ele preenchido), os seguintes por `POST /r/documentosCandidato/upload`. O limite de 1 MiB do DEV vale por arquivo. O form do legado exige os obrigatórios juntos só no navegador (`required`) |
-| Pagamento | legado | `GET /r/pagamentoIngresso`, `POST …/validarvoucher`, `POST …/efetivar.json` (em simulação) |
+| Pagamento | legado | `GET /r/pagamentoIngresso`, `POST …/validarvoucher`, `POST …/efetivar.json` (em simulação). Boleto, PIX e cartão: [pagamento-legado.md](pagamento-legado.md) |
 | Conclusão | — | ainda não ligada: `/r/terminoIngresso` e `proximo.json` (ver [roadmap.md](roadmap.md)) |
 
 A tabela abaixo é o levantamento da API v2 (16/10/2026), mantido para a migração quando o Lyceum liberar rotas de

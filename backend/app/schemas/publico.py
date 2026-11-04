@@ -2,6 +2,7 @@
 
 from pydantic import Field, field_validator
 
+from app.core.validators import login_normalizado
 from app.schemas.base import ApiModel
 
 
@@ -26,7 +27,7 @@ class RecuperarSenhaIn(ApiModel):
     @field_validator("login")
     @classmethod
     def _limpo(cls, v: str) -> str:
-        v = v.strip()
+        v = login_normalizado(v)  # CPF com pontuação vira só os dígitos
         if len(v) < 3:
             raise ValueError("Informe o e-mail, CPF, RG ou passaporte cadastrado.")
         return v
