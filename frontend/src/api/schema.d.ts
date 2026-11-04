@@ -422,6 +422,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/meus-dados": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obter */
+        get: operations["obter_api_v1_meus_dados_get"];
+        /** Salvar */
+        put: operations["salvar_api_v1_meus_dados_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/meus-dados/senha": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Alterar Senha */
+        post: operations["alterar_senha_api_v1_meus_dados_senha_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/publico/cabecalho": {
         parameters: {
             query?: never;
@@ -483,6 +518,15 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AlterarSenhaIn */
+        AlterarSenhaIn: {
+            /** Senhaatual */
+            senhaAtual: string;
+            /** Novasenha */
+            novaSenha: string;
+            /** Confirmacao */
+            confirmacao: string;
+        };
         /** AreaInteresse */
         AreaInteresse: {
             /** Nome */
@@ -840,6 +884,43 @@ export interface components {
             formaPagamento?: string | null;
             /** Numparcelas */
             numParcelas?: number | null;
+        };
+        /** Mensagem */
+        Mensagem: {
+            /** Mensagem */
+            mensagem: string;
+        };
+        /** MeusDados */
+        MeusDados: {
+            /** Email */
+            email: string;
+            /**
+             * Celular
+             * @description DDD + número, só dígitos
+             */
+            celular: string;
+            /**
+             * Telefone
+             * @description DDD + número, só dígitos
+             */
+            telefone?: string | null;
+            endereco: components["schemas"]["Endereco"];
+        };
+        /** MeusDadosUpdate */
+        MeusDadosUpdate: {
+            /** Email */
+            email: string;
+            /**
+             * Celular
+             * @description DDD + número, só dígitos
+             */
+            celular: string;
+            /**
+             * Telefone
+             * @description DDD + número, só dígitos
+             */
+            telefone?: string | null;
+            endereco: components["schemas"]["Endereco"];
         };
         /** Municipio */
         Municipio: {
@@ -1796,6 +1877,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Questionario"][];
+                };
+            };
+        };
+    };
+    obter_api_v1_meus_dados_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeusDados"];
+                };
+            };
+        };
+    };
+    salvar_api_v1_meus_dados_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeusDadosUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeusDados"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    alterar_senha_api_v1_meus_dados_senha_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlterarSenhaIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Mensagem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

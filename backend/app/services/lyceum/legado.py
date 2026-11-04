@@ -70,6 +70,7 @@ from app.schemas.documento import (
 )
 from app.schemas.inscricao import Inscricao
 from app.schemas.matricula import Contrato, Matricula
+from app.schemas.meus_dados import MeusDados, MeusDadosUpdate
 from app.schemas.pagamento import (
     Cobranca,
     CupomResultado,
@@ -449,6 +450,69 @@ class ClienteLegado:
             raise PortalError(422, "Revise os campos destacados.",
                               {campo: "Cidade não encontrada nesta UF. Use o CEP para preencher."})
         return achados[0].codigo
+
+    # ---------- Meus Dados: /r/alterarDados (contato, endereço e senha) ----------
+    async def _pagina_meus_dados(self, sid: str | None) -> str:
+        r = await self.get(sid, "/r/alterarDados")
+        if r.status_code != 200 or 'id="frm-pessoa-fisica"' not in r.text:
+            raise LyceumIndisponivel("Não foi possível abrir seus dados no Processo Seletivo")
+        return r.text
+
+    async def meus_dados(self, sid: str | None) -> MeusDados:
+        """Lê o formulário "Dados de Contato / Endereço"; o município vem pelo código (listarMunicipiosCodigo)."""
+        f = parse_form(await self._pagina_meus_dados(sid), "frm-pessoa-fisica")
+        cod = f.get("enderecoMunicipioCode") or ""
+        mun: dict = {}
+        if cod:
+            item = await self.get_json(sid, "/endereco/listarMunicipiosCodigo", {"codigo": cod})
+            mun = item[0] if isinstance(item, list) and item and isinstance(item[0], dict) else {}
+        tel = digits(f.get("dddFone", "") + f.get("telefone", ""))
+        # leitura tolerante: o cadastro do Lyceum pode estar incompleto (a validação vale ao salvar)
+        endereco = Endereco.model_construct(
+            pais="BRASIL", cep=mask_cep(f.get("cep", "")) if digits(f.get("cep", "")) else "",
+            uf=str(mun.get("uf") or ""), municipio=str(mun.get("nome") or ""), municipio_codigo=cod or None,
+            endereco=f.get("endereco", ""), numero=f.get("enderecoNum", ""),
+            complemento=f.get("enderecoCompl") or None, bairro=f.get("enderecoBairro", ""))
+        return MeusDados.model_construct(email=f.get("email", ""),
+                                         celular=digits(f.get("dddCelular", "") + f.get("celular", "")),
+                                         telefone=tel or None, endereco=endereco)
+
+    async def salvar_meus_dados(self, sid: str | None, d: MeusDadosUpdate) -> MeusDados:
+        """POST r/alterarDados/alterarPessoaFisica.json com o formulário, como o botão Salvar do legado.
+        O idPessoa vem da página aberta na sessão do candidato, nunca do navegador."""
+        f = parse_form(await self._pagina_meus_dados(sid), "frm-pessoa-fisica")
+        if not f.get("idPessoa"):
+            raise LyceumIndisponivel("Não foi possível abrir seus dados no Processo Seletivo")
+        end = d.endereco
+        cod = await self._codigo_municipio(sid, end, "endereco.municipio")
+        cel, tel = digits(d.celular), digits(d.telefone)
+        corpo = {
+            "idPessoa": f["idPessoa"], "dddFone": tel[:2], "telefone": tel[2:], "dddCelular": cel[:2],
+            "celular": cel[2:], "email": d.email, "cep": mask_cep(end.cep), "enderecoMunicipioCode": cod,
+            "enderecoMunicipio": cod, "endereco": end.endereco, "enderecoNum": end.numero,
+            "enderecoCompl": end.complemento, "enderecoBairro": end.bairro, "tokenCaptcha": None,
+        }
+        corpo = {k: (None if v in (None, "") else re.sub(r"</?[^>]+(>|$)", "", str(v))) for k, v in corpo.items()}
+        log.warning("[lyceum-legado] GRAVAÇÃO POST /r/alterarDados/alterarPessoaFisica.json: campos=%s",
+                    sorted(k for k, v in corpo.items() if v is not None))
+        await self.post_json(sid, "/r/alterarDados/alterarPessoaFisica.json", corpo)
+        return await self.meus_dados(sid)
+
+    async def alterar_senha(self, sid: str | None, senha_atual: str, nova: str) -> None:
+        """POST r/alterarDados/alterarSenhaPessoa.json, como o formulário "Alteração de Senha" do legado.
+        As senhas nunca vão para o log."""
+        pagina = await self._pagina_meus_dados(sid)
+        if 'id="recaptcha"' in pagina:
+            # em produção a página pode pedir o "Não sou um robô"; o portal ainda não trata o reCAPTCHA
+            raise PortalError(409, "A troca de senha pede uma verificação que o portal ainda não faz. "
+                                   "Use a opção Meus Dados do Processo Seletivo.")
+        f = parse_form(pagina, "frm-altera-senha")
+        if not f.get("idPessoa"):
+            raise LyceumIndisponivel("Não foi possível abrir seus dados no Processo Seletivo")
+        log.warning("[lyceum-legado] GRAVAÇÃO POST /r/alterarDados/alterarSenhaPessoa.json (troca de senha)")
+        await self.post_json(sid, "/r/alterarDados/alterarSenhaPessoa.json", {
+            "idPessoa": f["idPessoa"], "senhaAtual": senha_atual, "senha": nova, "senhaRepeticao": nova,
+            "tokenCaptcha": None})
 
     # ---------- etapa 2: pagamento ----------
     async def _pagina_pagamento(self, sid: str | None) -> str:

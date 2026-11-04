@@ -1027,6 +1027,107 @@
         }
       }
     },
+    "/api/v1/meus-dados": {
+      "get": {
+        "tags": [
+          "meus-dados"
+        ],
+        "summary": "Obter",
+        "operationId": "obter_api_v1_meus_dados_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeusDados"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "meus-dados"
+        ],
+        "summary": "Salvar",
+        "operationId": "salvar_api_v1_meus_dados_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeusDadosUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeusDados"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/meus-dados/senha": {
+      "post": {
+        "tags": [
+          "meus-dados"
+        ],
+        "summary": "Alterar Senha",
+        "operationId": "alterar_senha_api_v1_meus_dados_senha_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlterarSenhaIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Mensagem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/publico/cabecalho": {
       "get": {
         "tags": [
@@ -1091,6 +1192,33 @@
   },
   "components": {
     "schemas": {
+      "AlterarSenhaIn": {
+        "properties": {
+          "senhaAtual": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Senhaatual"
+          },
+          "novaSenha": {
+            "type": "string",
+            "maxLength": 40,
+            "minLength": 1,
+            "title": "Novasenha"
+          },
+          "confirmacao": {
+            "type": "string",
+            "title": "Confirmacao"
+          }
+        },
+        "type": "object",
+        "required": [
+          "senhaAtual",
+          "novaSenha",
+          "confirmacao"
+        ],
+        "title": "AlterarSenhaIn"
+      },
       "AreaInteresse": {
         "properties": {
           "nome": {
@@ -2254,6 +2382,89 @@
           "contrato"
         ],
         "title": "Matricula"
+      },
+      "Mensagem": {
+        "properties": {
+          "mensagem": {
+            "type": "string",
+            "title": "Mensagem"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mensagem"
+        ],
+        "title": "Mensagem"
+      },
+      "MeusDados": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "celular": {
+            "type": "string",
+            "title": "Celular",
+            "description": "DDD + número, só dígitos"
+          },
+          "telefone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefone",
+            "description": "DDD + número, só dígitos"
+          },
+          "endereco": {
+            "$ref": "#/components/schemas/Endereco"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "celular",
+          "endereco"
+        ],
+        "title": "MeusDados"
+      },
+      "MeusDadosUpdate": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "celular": {
+            "type": "string",
+            "title": "Celular",
+            "description": "DDD + número, só dígitos"
+          },
+          "telefone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Telefone",
+            "description": "DDD + número, só dígitos"
+          },
+          "endereco": {
+            "$ref": "#/components/schemas/Endereco"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "celular",
+          "endereco"
+        ],
+        "title": "MeusDadosUpdate"
       },
       "Municipio": {
         "properties": {

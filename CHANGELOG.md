@@ -4,6 +4,10 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
 
 ## [Não lançado]
 ### Adicionado
+- **Meus dados.** Tela `/meus-dados` (link "Meus dados" no topo), como o "Meus Dados" do Processo Seletivo:
+  e-mail, celular, telefone e endereço (`alterarPessoaFisica.json`) e troca de senha com a senha atual
+  (`alterarSenhaPessoa.json`). O `idPessoa` vem da sessão; senhas fora do log; com reCAPTCHA na página, a troca
+  é recusada com aviso. Mapa em `docs/meus-dados-legado.md`. Validado em DEV.
 - **Contrato e documentos abrem na hora.** Ao carregar "Minhas inscrições", o portal busca em segundo plano o
   contrato, a lista de documentos e as prévias das inscrições que têm esses botões (`lib/cacheTelas.ts`, cache em
   memória da aba por 5 min, apagado ao sair ou quando a sessão expira). Boleto e PIX ficam de fora: cada geração

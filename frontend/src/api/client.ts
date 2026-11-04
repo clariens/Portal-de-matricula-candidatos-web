@@ -13,6 +13,9 @@ import type {
   PagamentoIn,
   PagamentoResultado,
   Pix,
+  MeusDados,
+  MeusDadosUpdate,
+  AlterarSenhaIn,
   Pessoa,
   Questionario,
   Uf,
@@ -100,6 +103,11 @@ export const api = {
   me: () => request<Pessoa | null>("GET", "/me"),
   /** Recursos ligados no ambiente: conferência de documentos pela IA (servidor) ou pelo navegador. */
   recursos: () => request<{ conferenciaDocumentos: "ia" | "navegador" }>("GET", "/recursos"),
+
+  /** Meus dados (fora da matrícula): contato, endereço e senha de quem está logado. */
+  meusDados: () => request<MeusDados>("GET", "/meus-dados"),
+  salvarMeusDados: (d: MeusDadosUpdate) => request<MeusDados>("PUT", "/meus-dados", d),
+  alterarSenha: (s: AlterarSenhaIn) => request<{ mensagem: string }>("POST", "/meus-dados/senha", s),
 
   inscricoes: () => request<Inscricao[]>("GET", "/inscricoes"),
   inscricao: (id: string) => request<Inscricao>("GET", ins(id)),

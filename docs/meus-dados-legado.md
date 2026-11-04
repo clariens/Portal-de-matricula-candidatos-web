@@ -47,7 +47,17 @@ sucesso !" e os campos são limpos.
   documentos, nascimento). "Meus Dados" é outra rota, só contato e endereço, e vale fora da matrícula.
 - O portal já tem "Esqueci minha senha" (`/recuperarsenha`); a troca com a senha atual seria nova.
 
-## Para implementar (proposta)
+## No portal (implementado em 04/11/2026)
+- Tela **Meus dados** (`/meus-dados`, link no topo para quem está logado): contato e endereço (o CEP reusa a busca
+  do portal) e **Alterar senha** (senha atual, nova e confirmação).
+- BFF: `GET /api/v1/meus-dados`, `PUT /api/v1/meus-dados` (`alterarPessoaFisica.json`) e
+  `POST /api/v1/meus-dados/senha` (`alterarSenhaPessoa.json`). O `idPessoa` vem da página aberta na sessão do
+  candidato, nunca do navegador; as senhas não vão para o log.
+- Se a página pedir reCAPTCHA na troca de senha, o portal recusa com aviso (409) e não envia.
+- Validado em DEV (conta de teste, autorizado): leitura, gravação sem mudança (voltou idêntico) e troca de senha
+  (a antiga passou a dar 401 e a nova entra).
+
+## Proposta original
 - BFF: `GET /api/v1/meus-dados` (lê o `frm-pessoa-fisica`), `PUT /api/v1/meus-dados` (`alterarPessoaFisica.json`)
   e `POST /api/v1/meus-dados/senha` (`alterarSenhaPessoa.json`), sempre com o `idPessoa` da sessão.
 - Tela "Meus dados" no menu do topo (logado), com as mesmas regras acima; o CEP reusa o ViaCEP do portal.

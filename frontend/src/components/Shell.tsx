@@ -36,6 +36,9 @@ export function Shell() {
             <button type="button" onClick={() => nav("/inscricoes")}>
               Minhas inscrições
             </button>
+            <button type="button" onClick={() => nav("/meus-dados")}>
+              Meus dados
+            </button>
             <button
               type="button"
               onClick={async () => {

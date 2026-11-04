@@ -270,6 +270,26 @@ test("fluxo completo de matrícula (dublê do Lyceum)", async ({ page }) => {
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Voltar para minhas inscrições" }).click();
 
+  // meus dados: contato e endereço, e troca de senha (como "Meus Dados" do legado)
+  await page.getByRole("button", { name: "Meus dados" }).click();
+  await expect(page.getByRole("heading", { name: "Meus dados" })).toBeVisible();
+  await page.getByLabel("Celular (WhatsApp)").fill("34988887777");
+  await page.getByRole("button", { name: "Salvar dados" }).click();
+  await expect(page.getByText("Dados salvos.")).toBeVisible();
+  const trocarSenha = async (atual: string, nova: string, confirmacao = nova) => {
+    await page.getByLabel("Senha atual").fill(atual);
+    await page.getByLabel("Nova senha", { exact: true }).fill(nova);
+    await page.getByLabel("Confirme a nova senha").fill(confirmacao);
+    await page.getByRole("button", { name: "Alterar senha" }).click();
+  };
+  await trocarSenha("demonstracao", "nova123", "outra");
+  await expect(page.getByText("As senhas não conferem.")).toBeVisible();
+  await trocarSenha("errada", "nova123");
+  await expect(page.getByRole("alert").filter({ hasText: "Senha atual não confere." })).toBeVisible();
+  await trocarSenha("demonstracao", "nova123");
+  await expect(page.locator(".alert.ok")).toContainText("Senha alterada");
+  await trocarSenha("nova123", "demonstracao"); // volta a senha do dublê
+
   // sair
   await page.getByRole("button", { name: "Sair" }).click();
   await expect(page).toHaveURL(/\/login/);

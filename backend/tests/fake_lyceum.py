@@ -15,6 +15,7 @@ from app.schemas.candidato import Candidato, CandidatoUpdate, CepResultado, Ende
 from app.schemas.documento import Anexo, DocumentoStatus, EnvioDocumentosResultado, OcrResultado
 from app.schemas.inscricao import Inscricao
 from app.schemas.matricula import ConfirmacaoResultado, Contrato, Disciplina, Matricula, Questionario
+from app.schemas.meus_dados import MeusDados, MeusDadosUpdate
 from app.schemas.pagamento import (
     Cobranca,
     CupomResultado,
@@ -112,6 +113,9 @@ class FakeLyceum:
         self.pagamentos: dict[str, PagamentoIn] = {}
         self.confirmados: set[str] = set()
         self.cupom: dict[str, str] = {}
+        self.senha = SENHA_DEMO
+        self.dados_pessoa = MeusDados(email=CANDIDATO.email_pessoal, celular=CANDIDATO.celular,
+                                      telefone=CANDIDATO.telefone, endereco=CANDIDATO.endereco.model_copy(deep=True))
         self._atualizar_acoes()
 
     # ---------- helpers ----------
@@ -139,7 +143,7 @@ class FakeLyceum:
     async def autenticar(self, login: str, senha: str) -> Pessoa:
         self.ultimo_login = login  # o que chegou ao "Lyceum" (os testes conferem a normalização do CPF)
         ok_login = digits(login) == digits(PESSOA.cpf) or login.strip().lower() == PESSOA.email
-        if not ok_login or senha != SENHA_DEMO:
+        if not ok_login or senha != self.senha:
             raise PortalError(401, "Usuário ou senha inválidos.")
         return PESSOA
 
@@ -323,6 +327,18 @@ class FakeLyceum:
         if self.confirmados:
             return [Questionario(codigo="SOCIO2027", titulo="Questionário socioeconômico do ingressante")]
         return []
+
+    async def meus_dados(self, cod_pessoa) -> MeusDados:
+        return self.dados_pessoa.model_copy(deep=True)
+
+    async def salvar_meus_dados(self, cod_pessoa, dados: MeusDadosUpdate) -> MeusDados:
+        self.dados_pessoa = MeusDados(**dados.model_dump())
+        return self.dados_pessoa.model_copy(deep=True)
+
+    async def alterar_senha(self, cod_pessoa, senha_atual, nova_senha) -> None:
+        if senha_atual != self.senha:
+            raise PortalError(422, "Senha atual não confere.")
+        self.senha = nova_senha
 
     async def ping(self) -> bool:
         return True

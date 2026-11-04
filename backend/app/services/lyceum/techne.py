@@ -54,6 +54,8 @@ ENDPOINTS: dict[str, str | None] = {
     "listar_documentos": None,
     "enviar_documento": None,
     "arquivo_documento": None,
+    "meus_dados": None,
+    "alterar_senha": None,
     "boleto_pagamento": None,
     "pix_pagamento": None,  # 403 para a conta de serviço em DEV (30/10/2026)
     "opcoes_pagamento": None,
@@ -76,6 +78,8 @@ NECESSIDADE = {
     "listar_documentos": "tipos de documento do processo",
     "enviar_documento": "upload de documento do ingresso",
     "arquivo_documento": "download de documento entregue",
+    "meus_dados": "dados de contato e endereço da pessoa",
+    "alterar_senha": "troca de senha",
     "boleto_pagamento": "boleto da 1ª parcela",
     "pix_pagamento": "PIX da 1ª parcela",
     "opcoes_pagamento": "planos de pagamento do concurso",
@@ -377,6 +381,21 @@ class TechneGateway:
             self._exigir_cobranca_real()
             return await self.legado.pix(sessao_atual.get(), insc.cod_candidato, insc.cod_concurso)
         self._endpoint("pix_pagamento")
+
+    async def meus_dados(self, cod_pessoa):
+        if self._usa_legado:
+            return await self.legado.meus_dados(sessao_atual.get())
+        self._endpoint("meus_dados")
+
+    async def salvar_meus_dados(self, cod_pessoa, dados):
+        if self._usa_legado:
+            return await self.legado.salvar_meus_dados(sessao_atual.get(), dados)
+        self._endpoint("meus_dados")
+
+    async def alterar_senha(self, cod_pessoa, senha_atual, nova_senha):
+        if self._usa_legado:
+            return await self.legado.alterar_senha(sessao_atual.get(), senha_atual, nova_senha)
+        self._endpoint("alterar_senha")
 
     async def obter_matricula(self, cod_pessoa, insc):
         # Legado: número da matrícula do histórico + instruções de assinatura da página /r/contrato

@@ -8,6 +8,7 @@ import { ContratoInscricao } from "./pages/ContratoInscricao";
 import { DocumentosIngresso } from "./pages/DocumentosIngresso";
 import { Historico } from "./pages/Historico";
 import { Login } from "./pages/Login";
+import { MeusDados } from "./pages/MeusDados";
 import { Wizard } from "./pages/wizard/Wizard";
 import "./styles/app.css";
 
@@ -17,6 +18,7 @@ const router = createBrowserRouter([
     children: [
       { path: "/login", element: <Login /> },
       { path: "/inscricoes", element: <RequireAuth><Historico /></RequireAuth> },
+      { path: "/meus-dados", element: <RequireAuth><MeusDados /></RequireAuth> },
       { path: "/inscricoes/:id/contrato", element: <RequireAuth><ContratoInscricao /></RequireAuth> },
       { path: "/inscricoes/:id/documentos", element: <RequireAuth><DocumentosIngresso /></RequireAuth> },
       { path: "/matricula/:id/:etapa?", element: <RequireAuth><Wizard /></RequireAuth> },

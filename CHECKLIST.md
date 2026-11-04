@@ -24,6 +24,8 @@ irreversível no Lyceum e precisa de aval antes do primeiro envio real. Visão g
 - [x] Mensagem clara quando o Processo Seletivo está fora do ar
 - [ ] Recuperação de senha testada de verdade com uma conta autorizada (envia e-mail ao dono)
 - [ ] Rate limit no login e na recuperação de senha
+- [x] Meus dados: contato, endereço e troca de senha (validado em DEV)
+- [ ] Troca de senha com reCAPTCHA (se produção pedir)
 
 ## Fase 2 — Etapa Dados
 - [x] Leitura (`/r/ingresso`) e gravação real (`atualizar.json`) validadas em DEV
