@@ -4,6 +4,10 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
 
 ## [Não lançado]
 ### Adicionado
+- **Contrato e documentos abrem na hora.** Ao carregar "Minhas inscrições", o portal busca em segundo plano o
+  contrato, a lista de documentos e as prévias das inscrições que têm esses botões (`lib/cacheTelas.ts`, cache em
+  memória da aba por 5 min, apagado ao sair ou quando a sessão expira). Boleto e PIX ficam de fora: cada geração
+  registra uma cobrança no banco.
 - **Telas próprias de Contrato e Documentos de ingresso.** No histórico, "Ver contrato" abre
   `/inscricoes/{ref}/contrato` (matrícula, turma, pagamento e como assinar pela Clicksign) e "Documentos" abre
   `/inscricoes/{ref}/documentos` (o que o Lyceum registrou, com prévia e visor), fora do assistente de matrícula.

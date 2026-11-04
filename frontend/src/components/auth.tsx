@@ -4,6 +4,7 @@ import { api, setUnauthorizedHandler } from "../api/client";
 import type { Pessoa } from "../api/types";
 import { Spin } from "./ui";
 import { limparAnexos } from "../lib/anexosLocais";
+import { cacheTelas } from "../lib/cacheTelas";
 
 interface AuthState {
   pessoa: Pessoa | null;
@@ -19,7 +20,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
-    setUnauthorizedHandler(() => setPessoa(null));
+    setUnauthorizedHandler(() => {
+      cacheTelas.limpar();
+      setPessoa(null);
+    });
     api.me().then(setPessoa).catch(() => setPessoa(null)).finally(() => setCarregando(false));
   }, []);
 
@@ -29,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const sair = useCallback(async () => {
     await api.logout().catch(() => {});
     await limparAnexos(); // documentos pessoais não ficam guardados no computador depois de sair
+    cacheTelas.limpar();
     setPessoa(null);
   }, []);
 

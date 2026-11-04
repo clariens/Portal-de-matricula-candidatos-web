@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, ApiError } from "../api/client";
+import { ApiError } from "../api/client";
 import type { Inscricao, Matricula } from "../api/types";
 import { AssinaturaContrato } from "../components/AssinaturaContrato";
 import { Alert } from "../components/ui";
+import { cacheTelas } from "../lib/cacheTelas";
 
 /** Contrato da inscrição depois do pagamento (botão "Contrato" do histórico): matrícula e como assinar. */
 export function ContratoInscricao() {
@@ -14,7 +15,7 @@ export function ContratoInscricao() {
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([api.inscricao(id), api.matricula(id)])
+    Promise.all([cacheTelas.inscricao(id), cacheTelas.matricula(id)])
       .then(([i, mat]) => {
         setInsc(i);
         setM(mat);

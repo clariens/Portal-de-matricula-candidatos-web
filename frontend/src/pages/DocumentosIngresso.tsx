@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, ApiError } from "../api/client";
+import { ApiError } from "../api/client";
 import type { DocumentoStatus, Inscricao } from "../api/types";
 import { Alert, Chip } from "../components/ui";
 import { Visor, type Visto } from "../components/Visor";
+import { cacheTelas } from "../lib/cacheTelas";
 import { miniatura } from "../lib/imagem";
 
 const STATUS: Record<string, [string, string]> = {
@@ -34,7 +35,7 @@ export function DocumentosIngresso() {
   const [vendo, setVendo] = useState<Visto | null>(null);
 
   useEffect(() => {
-    Promise.all([api.inscricao(id), api.documentos(id)])
+    Promise.all([cacheTelas.inscricao(id), cacheTelas.documentos(id)])
       .then(([i, d]) => {
         setInsc(i);
         setDocs(d);
@@ -51,7 +52,7 @@ export function DocumentosIngresso() {
       const tipo = ativo ? fila.shift() : undefined;
       if (!tipo) return;
       try {
-        const blob = await api.arquivoDocumento(id, tipo);
+        const blob = await cacheTelas.arquivo(id, tipo);
         const pdf = blob.type === "application/pdf";
         const thumb = pdf ? undefined : await miniatura(new File([blob], tipo, { type: blob.type })).catch(() => undefined);
         if (ativo) setPrevias((x) => ({ ...x, [tipo]: { url: URL.createObjectURL(blob), pdf, thumb } }));

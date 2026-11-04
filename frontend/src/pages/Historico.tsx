@@ -4,6 +4,7 @@ import { api, ApiError } from "../api/client";
 import type { Inscricao } from "../api/types";
 import { useAuth } from "../components/auth";
 import { Alert, Chip } from "../components/ui";
+import { preCarregar } from "../lib/cacheTelas";
 
 export const SITUACAO_TOM: Record<string, string> = {
   Convocado: "info",
@@ -21,7 +22,12 @@ export function Historico() {
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
-    api.inscricoes().then(setItens).catch((e) => setErro(e instanceof ApiError ? e.message : "Erro ao carregar."));
+    api.inscricoes()
+      .then((lista) => {
+        setItens(lista);
+        preCarregar(lista); // contrato e documentos abrem na hora depois (boleto e PIX não: geram cobrança)
+      })
+      .catch((e) => setErro(e instanceof ApiError ? e.message : "Erro ao carregar."));
   }, []);
 
   const primeiroNome = pessoa?.nome.split(" ")[0] ?? "";
