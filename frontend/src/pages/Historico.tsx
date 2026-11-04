@@ -93,13 +93,23 @@ export function Historico() {
                   {i.acoes.includes("continuar_matricula") ? "Continuar matrícula" : "Fazer matrícula"}
                 </button>
               )}
+              {i.acoes.includes("boleto") && (
+                <button className="btn btn-ghost" onClick={() => nav(`/matricula/${i.ref ?? ""}/conclusao?pagar=boleto`)}>
+                  Boleto
+                </button>
+              )}
+              {i.acoes.includes("pix") && (
+                <button className="btn btn-ghost" onClick={() => nav(`/matricula/${i.ref ?? ""}/conclusao?pagar=pix`)}>
+                  Pagar com PIX
+                </button>
+              )}
               {i.acoes.includes("contrato") && (
-                <button className="btn btn-ghost" onClick={() => nav(`/matricula/${i.ref ?? ""}/conclusao`)}>
+                <button className="btn btn-ghost" onClick={() => nav(`/inscricoes/${i.ref ?? ""}/contrato`)}>
                   Ver contrato
                 </button>
               )}
               {i.acoes.includes("documentos") && (
-                <button className="btn btn-ghost" onClick={() => nav(`/matricula/${i.ref ?? ""}/documentos`)}>
+                <button className="btn btn-ghost" onClick={() => nav(`/inscricoes/${i.ref ?? ""}/documentos`)}>
                   Documentos
                 </button>
               )}

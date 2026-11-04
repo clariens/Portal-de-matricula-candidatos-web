@@ -100,3 +100,22 @@ async def test_documentos_em_consulta_depois_do_pagamento():
     assert set(docs) == {"05", "77"} and all(d.status == "enviado" for d in docs.values())
     assert docs["05"].nome == "CPF"  # nome do catálogo
     assert docs["77"].nome == "Comprovante de Quitação Eleitoral"  # fora do catálogo: nome da tela, sem "- Obrigatório"
+
+
+def test_historico_com_cobranca_em_aberto_oferece_boleto_e_pix():
+    """Linha do histórico legado em DEV (04/11/2026), Pré-Matriculado com cobrança em aberto: botões Boleto,
+    "Tentar Novo Pagamento Cartão/PIX" (modal com PIX permitido), Contrato e Documentos Ingresso."""
+    from tests.test_techne import _linha
+
+    botoes = (f"<button onclick=\"obtemBoleto('{CAND}', '{CONC}')\">Boleto</button>"
+              f"<button id=\"btnNovoPagamento\" onClick=\"openModalWindown('8553','','13091.00',1,'{CAND}','{CONC}', "
+              "false, true, 'Boleto', '3539201', true,'true','35489069');\" data-toggle=\"modal\">Tentar Novo Pagamento"
+              f"</button><button onclick=\"chamaContrato('{MAT}')\">Contrato</button>"
+              f"<a href=\"/processo-seletivo/r/documentosPorProcessoCandidato?q=MTM2M3NlcGFyYWRvcmI2NDIwMjcxMDAwMDAzOTE=\">Docs</a>")
+    pagina = ("<table><tbody>" + _linha(CAND, "2027.1 - Processo Seletivo ENEM - IMEPAC - Medicina", "Pré-Matriculado",
+                                        "05/11/2026", "Em Aberto", botoes) + "</tbody></table>")
+    (i,) = parse_historico(pagina)
+    assert i.acoes == ["boleto", "pix", "contrato", "documentos"] and i.matricula == MAT
+    # sem PIX permitido no modal: só o boleto
+    (j,) = parse_historico(pagina.replace("true,'true','35489069'", "true,'false','35489069'"))
+    assert "pix" not in j.acoes and "boleto" in j.acoes

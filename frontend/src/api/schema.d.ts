@@ -802,7 +802,7 @@ export interface components {
              * Acoes
              * @default []
              */
-            acoes: ("matricular" | "continuar_matricula" | "contrato" | "documentos")[];
+            acoes: ("matricular" | "continuar_matricula" | "boleto" | "pix" | "contrato" | "documentos")[];
         };
         /** LinkLegado */
         LinkLegado: {

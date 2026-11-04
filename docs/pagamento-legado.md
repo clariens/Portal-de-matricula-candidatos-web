@@ -59,6 +59,17 @@ Regras do navegador: número com 15 dígitos se começar com 3 (Amex), 16 nos de
 valor, idCobranca)` no botão). Ainda não vimos esse HTML: ele só existe depois de um `efetivar.json` real.
 
 ## 3. Histórico: cobranças pendentes (`historico.js`)
+Mapeado de novo em 04/11/2026 (DEV): a linha de uma inscrição **Pré-Matriculado** com cobrança **Em Aberto** tem:
+
+| Botão | Chamada | No portal |
+|---|---|---|
+| Boleto | `obtemBoleto(codCandidato, codConcurso)` → `GET r/historico/gerarBoleto` | ação `boleto`: "Boleto" no card → conclusão com o boleto |
+| Tentar Novo Pagamento Cartão/PIX | `openModalWindown(oferta, pedido, valor, parcelas, candidato, concurso, podeBoletar, podeCartao, 'Boleto', idBoleto, permiteBoleto, permitePix, idCobranca)` abre `#myModal`; os planos vêm de `GET r/listarMetodosPagamento?oferta=&permitePlanosPix=` (em DEV: `PG_CARTÃO_A` Cartao e `PG_PIX` PIX, 6 parcelas); PIX → `geraPix`; cartão → `POST r/pagamentoCartao/tentarNovoPagamento` | ação `pix` (quando `permitePix` = true): "Pagar com PIX" no card → conclusão com o PIX. Cartão continua "Em breve" (PCI) |
+| Contrato | `chamaContrato(códigoDoAluno)` → `r/contrato/geraContratoAceite` + `/r/contrato` | ação `contrato`: "Ver contrato" |
+| Documentos Ingresso | link `r/documentosPorProcessoCandidato?q=` | ação `documentos`: consulta |
+
+Valor das opções do modal: `plano:formaPagamento:numParcelasCartao:candidato:concurso:valor:idCobranca`.
+
 Usado pelo legado quando a pessoa volta depois para pagar (taxa de inscrição ou parcela em aberto).
 
 | O quê | Rota |

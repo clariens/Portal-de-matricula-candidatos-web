@@ -3,6 +3,7 @@ import { api, ApiError } from "../../api/client";
 import type { DocumentoStatus, OcrResultado } from "../../api/types";
 import { guardarAnexo, listarAnexos, removerAnexo, type AnexoLocal } from "../../lib/anexosLocais";
 import { Alert, Spin, useToast } from "../../components/ui";
+import { Visor, type Visto } from "../../components/Visor";
 import { norm } from "../../lib/format";
 import { canvasParaJpeg, ehWebp, imagemParaCanvas, miniatura } from "../../lib/imagem";
 import { ACAO_POR_VEREDITO, analisar, type OcrAnalise, type Veredito } from "../../lib/ocr/analisar";
@@ -711,37 +712,6 @@ interface Previa {
   pdf?: boolean;
   thumb?: string;
   indisponivel?: boolean; // o Lyceum registrou o documento, mas não devolve o arquivo
-}
-
-interface Visto {
-  nome: string;
-  url: string;
-  pdf: boolean;
-  arquivo: string; // nome sugerido para baixar
-  temporaria: boolean; // URL criada só para o visor (anexo local): liberada ao fechar
-}
-
-/** Visor do documento: imagem ou PDF, com opção de baixar. Usa o <dialog> nativo (foco e Esc do navegador). */
-function Visor({ visto, fechar }: { visto: Visto; fechar: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const dlg = ref.current;
-    if (dlg && !dlg.open) dlg.showModal();
-  }, []);
-  return (
-    <dialog ref={ref} className="visor" aria-label={visto.nome} onClose={fechar} onClick={(e) => e.target === ref.current && fechar()}>
-      <header>
-        <h3>{visto.nome}</h3>
-        <div>
-          <a className="btn btn-ghost btn-sm" href={visto.url} download={visto.arquivo}>Baixar</a>
-          <button className="btn btn-primary btn-sm" type="button" onClick={fechar} autoFocus>Fechar</button>
-        </div>
-      </header>
-      {visto.pdf
-        ? <iframe src={visto.url} title={visto.nome} />
-        : <img src={visto.url} alt={visto.nome} />}
-    </dialog>
-  );
 }
 
 /** Resultado guardado da conferência → formato da tela. */

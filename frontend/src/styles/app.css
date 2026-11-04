@@ -308,3 +308,9 @@ a{color:var(--brand)}
 @keyframes deslizar{0%{transform:translateX(-100%)}100%{transform:translateX(340%)}}
 .contrato-instrucoes{display:grid;gap:8px;font-size:14px}
 .contrato-instrucoes p{margin:0}
+/* telas próprias de contrato e documentos (depois do pagamento) */
+.resumo-inscricao h2{margin:0;font-size:18px}
+.resumo-inscricao>p{margin:4px 0 0}
+.resumo-inscricao dl{display:flex;flex-wrap:wrap;gap:12px 28px;margin:14px 0 0}
+.resumo-inscricao dt{font-size:12px;color:var(--muted)}
+.resumo-inscricao dd{margin:2px 0 0;font-weight:600}

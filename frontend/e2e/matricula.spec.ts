@@ -253,6 +253,23 @@ test("fluxo completo de matrícula (dublê do Lyceum)", async ({ page }) => {
   await expect(card.locator(".chip")).toHaveText("Pré-Matriculado");
   await expect(card.getByRole("button", { name: "Ver contrato" })).toBeVisible();
 
+  // contrato e documentos de ingresso abrem em telas próprias
+  await card.getByRole("button", { name: "Ver contrato" }).click();
+  await expect(page).toHaveURL(/\/inscricoes\/[A-Za-z0-9_-]{20,}\/contrato$/);
+  await expect(page.getByRole("heading", { name: "Contrato", exact: true })).toBeVisible();
+  await expect(page.locator(".resumo-inscricao")).toContainText("2716520002");
+  await expect(page.getByRole("heading", { name: "Assine o contrato" })).toBeVisible();
+  await page.getByRole("button", { name: "Voltar para minhas inscrições" }).click();
+  await card.getByRole("button", { name: "Documentos" }).click();
+  await expect(page.getByRole("heading", { name: "Documentos de ingresso" })).toBeVisible();
+  const cpfIngresso = page.locator(".doc", { has: page.getByRole("heading", { name: "CPF", exact: true }) });
+  await expect(cpfIngresso.locator(".chip")).toHaveText("Enviado");
+  await expect(page.locator(".doc", { hasText: "Cartão de Vacina" })).toHaveCount(0); // só o que foi registrado
+  await cpfIngresso.getByRole("button", { name: "Ver CPF" }).click();
+  await expect(page.locator("dialog.visor").getByRole("img", { name: "CPF" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Voltar para minhas inscrições" }).click();
+
   // sair
   await page.getByRole("button", { name: "Sair" }).click();
   await expect(page).toHaveURL(/\/login/);

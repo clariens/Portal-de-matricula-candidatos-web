@@ -912,6 +912,12 @@ def parse_historico(pagina: str) -> list[Inscricao]:
         acoes: list[str] = []
         if ingresso and situacao == "Convocado":
             acoes.append("matricular")
+        if "obtemBoleto(" in tr:
+            acoes.append("boleto")
+        novo_pgto = _MODAL_PAGAMENTO_RE.search(tr)
+        args = [x.strip().strip("'\"") for x in novo_pgto[1].split(",")] if novo_pgto else []
+        if len(args) >= 13 and args[11] == "true":  # permitePlanosPix: o modal oferece PIX
+            acoes.append("pix")
         contrato_btn = _CONTRATO_RE.search(tr)
         if contrato_btn:
             acoes.append("contrato")

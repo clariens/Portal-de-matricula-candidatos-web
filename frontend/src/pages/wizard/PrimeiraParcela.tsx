@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../../api/client";
 import type { Inscricao, PagamentoResultado, Pix } from "../../api/types";
 import { Alert, Chip, Spin, useToast } from "../../components/ui";
@@ -28,7 +29,16 @@ export function PrimeiraParcela({ inscRef, cobranca, insc }: { inscRef: string; 
   const daInscricao = insc?.formaPagamento?.toUpperCase() === "PIX" ? "PIX" : insc?.formaPagamento?.toLowerCase() === "boleto" ? "Boleto" : undefined;
   const forma = cobranca?.formaPagamento ?? daInscricao;
   const pago = /^pago/i.test(insc?.statusPagamento ?? "");
-  const [escolhida, setEscolhida] = useState<Forma | null>(forma === "Boleto" || forma === "PIX" ? forma : null);
+  // ?pagar=boleto|pix: veio dos botões "Boleto" / "Pagar com PIX" do histórico
+  const [params] = useSearchParams();
+  const pedido = params.get("pagar")?.toLowerCase();
+  const inicial: Forma | null = pedido === "pix" ? "PIX" : pedido === "boleto" ? "Boleto"
+    : forma === "Boleto" || forma === "PIX" ? forma : null;
+  const [escolhida, setEscolhida] = useState<Forma | null>(inicial);
+  const secao = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (pedido) secao.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [pedido]);
 
   if (pago)
     return (
@@ -42,7 +52,7 @@ export function PrimeiraParcela({ inscRef, cobranca, insc }: { inscRef: string; 
     );
 
   return (
-    <section className="card panel" style={{ marginTop: 16 }}>
+    <section className="card panel" style={{ marginTop: 16 }} ref={secao}>
       <div className="panel-head">
         <h2>Primeira parcela</h2>
         {forma && <Chip tone="info">{forma === "Cartao" ? "Cartão" : forma}</Chip>}
@@ -61,11 +71,16 @@ export function PrimeiraParcela({ inscRef, cobranca, insc }: { inscRef: string; 
           <span>Vencimento {insc.vencimento}{insc.statusPagamento ? ` · ${insc.statusPagamento}` : ""}</span>
         </div>
       )}
-      {forma !== "Cartao" && !escolhida && (
-        <div className="parcela-escolha">
-          <span className="muted">Gere o pagamento da 1ª parcela:</span>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setEscolhida("Boleto")}>Boleto</button>
-          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setEscolhida("PIX")}>PIX</button>
+      {forma !== "Cartao" && (
+        // como o "Tentar Novo Pagamento" do legado: dá para trocar entre boleto e PIX da mesma cobrança
+        <div className="parcela-escolha" role="group" aria-label="Forma de pagamento da 1ª parcela">
+          <span className="muted">{escolhida ? "Pagar com:" : "Gere o pagamento da 1ª parcela:"}</span>
+          {(["Boleto", "PIX"] as const).map((f) => (
+            <button key={f} className={`btn btn-sm ${escolhida === f ? "btn-primary" : "btn-ghost"}`} type="button"
+                    aria-pressed={escolhida === f} onClick={() => setEscolhida(f)}>
+              {f}
+            </button>
+          ))}
         </div>
       )}
       {escolhida && <Gerado key={escolhida} inscRef={inscRef} forma={escolhida} />}

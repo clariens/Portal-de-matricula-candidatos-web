@@ -189,6 +189,9 @@ class FakeLyceum:
     # ---------- documentos ----------
     async def listar_documentos(self, cod_pessoa: str, insc: Inscricao) -> list[DocumentoStatus]:
         enviados = self.documentos.get(insc.cod_candidato, {})
+        if self.inscricoes[insc.cod_candidato].situacao != "Convocado":
+            # como o legado depois do pagamento ("Documentos Ingresso"): só o que foi registrado
+            return [d.model_copy(deep=True) for d in enviados.values()]
         out = []
         for t in TIPOS_DOCUMENTO:
             out.append(enviados.get(t.codigo) or DocumentoStatus(**t.model_dump()))

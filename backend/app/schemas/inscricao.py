@@ -3,7 +3,8 @@ from typing import Literal
 from app.schemas.base import ApiModel
 
 Situacao = Literal["Convocado", "Confirmado", "Pré-Matriculado", "Matriculado", "Cancelado", "Inscrito"]
-Acao = Literal["matricular", "continuar_matricula", "contrato", "documentos"]
+# boleto/pix: cobrança em aberto depois do pagamento (botões Boleto e "Tentar Novo Pagamento Cartão/PIX" do legado)
+Acao = Literal["matricular", "continuar_matricula", "boleto", "pix", "contrato", "documentos"]
 Etapa = Literal["dados", "documentos", "pagamento", "conclusao"]
 
 

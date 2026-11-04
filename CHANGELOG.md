@@ -4,6 +4,15 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
 
 ## [Não lançado]
 ### Adicionado
+- **Telas próprias de Contrato e Documentos de ingresso.** No histórico, "Ver contrato" abre
+  `/inscricoes/{ref}/contrato` (matrícula, turma, pagamento e como assinar pela Clicksign) e "Documentos" abre
+  `/inscricoes/{ref}/documentos` (o que o Lyceum registrou, com prévia e visor), fora do assistente de matrícula.
+  "Boleto" e "Pagar com PIX" continuam abrindo a conclusão. Visor e bloco de assinatura viraram componentes
+  (`components/Visor.tsx`, `components/AssinaturaContrato.tsx`).
+- **Boleto e PIX pelo histórico.** Como o histórico do legado (mapeado de novo em 04/11/2026), a inscrição
+  pré-matriculada com cobrança em aberto ganha os botões "Boleto" e "Pagar com PIX" (ações `boleto` e `pix`, lidas de
+  `obtemBoleto` e do modal "Tentar Novo Pagamento Cartão/PIX"), que abrem a conclusão já com a forma escolhida. Na
+  1ª parcela dá para trocar entre boleto e PIX.
 - **Contrato e documentos depois do pagamento.** Para inscrição pré-matriculada, "Ver contrato" abre a conclusão
   com o número da matrícula (código do aluno do histórico), a situação do contrato e as instruções de assinatura
   lidas da página de contrato do legado (Clicksign pelo WhatsApp do responsável financeiro); a 1ª parcela usa a forma
