@@ -177,7 +177,7 @@ function AlterarSenha() {
             <Field id="confirmacao" label="Confirme a nova senha" type="password" value={s.confirmacao} onValue={set("confirmacao")} cls="c4" autoComplete="new-password" maxLength={40} error={errors.confirmacao} />
           </div>
         </fieldset>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}>
+        <div className="acoes-direita">
           <button className="btn btn-primary" type="submit" disabled={enviando}>
             {enviando ? <><Spin /> Alterando</> : "Alterar senha"}
           </button>

@@ -102,10 +102,10 @@ export function EtapaDados() {
           <div className="grid g12">
             <Field id="nomeCompleto" label="Nome completo" value={f.nomeCompleto} onValue={set("nomeCompleto")} cls="c8" error={errors.nomeCompleto} autoComplete="name" />
             <Field id="dataNascimento" label="Data de nascimento" value={f.dataNascimento} onValue={set("dataNascimento")} cls="c4" mask="date" inputMode="numeric" placeholder="dd/mm/aaaa" error={errors.dataNascimento} />
-            <Select id="sexo" label="Sexo" value={f.sexo} onValue={set("sexo")} options={[["", "Selecione"], ...SEXOS]} error={errors.sexo} />
-            <Select id="estadoCivil" label="Estado civil" value={f.estadoCivil} onValue={set("estadoCivil")} options={[["", "Selecione"], ...ESTADOS_CIVIS.map((e): [string, string] => [e, e])]} error={errors.estadoCivil} />
-            <Field id="cpf" label="CPF" value={f.cpf} onValue={set("cpf")} cls="c3" mask="cpf" inputMode="numeric" error={errors.cpf} />
-            <Field id="identidade" label="RG" value={f.identidade} onValue={set("identidade")} cls="c3" error={errors.identidade} />
+            <Select id="sexo" label="Sexo" value={f.sexo} onValue={set("sexo")} options={[["", "Selecione"], ...SEXOS]} cls="c3 m6" error={errors.sexo} />
+            <Select id="estadoCivil" label="Estado civil" value={f.estadoCivil} onValue={set("estadoCivil")} options={[["", "Selecione"], ...ESTADOS_CIVIS.map((e): [string, string] => [e, e])]} cls="c3 m6" error={errors.estadoCivil} />
+            <Field id="cpf" label="CPF" value={f.cpf} onValue={set("cpf")} cls="c3 m6" mask="cpf" inputMode="numeric" error={errors.cpf} />
+            <Field id="identidade" label="RG" value={f.identidade} onValue={set("identidade")} cls="c3 m6" error={errors.identidade} />
           </div>
         </section>
         <section className="card panel">

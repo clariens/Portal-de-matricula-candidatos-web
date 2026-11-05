@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, Outlet, useNavigate } from "react-router-dom";
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api, apiLog } from "../api/client";
 import type { Cabecalho } from "../api/types";
 import logo from "../assets/clariens-educacao.png";
@@ -11,7 +11,6 @@ const INSCRICOES_PELO_PORTAL = false;
 
 export function Shell() {
   const { pessoa, sair } = useAuth();
-  const nav = useNavigate();
   const [cab, setCab] = useState<Cabecalho | null>(null);
   useEffect(() => {
     api.cabecalho().then(setCab).catch(() => setCab(null)); // sem o menu, o portal segue funcionando
@@ -31,31 +30,64 @@ export function Shell() {
             </a>
           </nav>
         )}
-        {pessoa && (
-          <nav aria-label="Principal">
-            <button type="button" onClick={() => nav("/inscricoes")}>
-              Minhas inscrições
-            </button>
-            <button type="button" onClick={() => nav("/meus-dados")}>
-              Meus dados
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                await sair();
-                nav("/login");
-              }}
-            >
-              Sair
-            </button>
-          </nav>
-        )}
+        {pessoa && <MenuConta sair={sair} />}
       </header>
       <main className="wrap" id="conteudo">
         <Outlet />
       </main>
       {import.meta.env.DEV && <ApiInspector />}
     </>
+  );
+}
+
+/** Navegação de quem está logado. No computador, botões no topo; no celular, recolhida no botão "Menu". */
+function MenuConta({ sair }: { sair: () => Promise<void> }) {
+  const nav = useNavigate();
+  const { pathname } = useLocation();
+  const [aberto, setAberto] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => setAberto(false), [pathname]);
+  useEffect(() => {
+    if (!aberto) return;
+    const fora = (e: PointerEvent) => ref.current && !ref.current.contains(e.target as Node) && setAberto(false);
+    const esc = (e: KeyboardEvent) => e.key === "Escape" && setAberto(false);
+    document.addEventListener("pointerdown", fora);
+    document.addEventListener("keydown", esc);
+    return () => {
+      document.removeEventListener("pointerdown", fora);
+      document.removeEventListener("keydown", esc);
+    };
+  }, [aberto]);
+  const atual = (p: string) => (pathname.startsWith(p) ? "page" : undefined);
+  return (
+    <div className="conta" ref={ref}>
+      <button type="button" className="menu-botao" aria-expanded={aberto} aria-controls="menu-conta"
+              onClick={() => setAberto((a) => !a)}>
+        <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false">
+          {aberto
+            ? <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            : <path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />}
+        </svg>
+        Menu
+      </button>
+      <nav aria-label="Principal" id="menu-conta" className={aberto ? "aberto" : undefined}>
+        <button type="button" aria-current={atual("/inscricoes")} onClick={() => nav("/inscricoes")}>
+          Minhas inscrições
+        </button>
+        <button type="button" aria-current={atual("/meus-dados")} onClick={() => nav("/meus-dados")}>
+          Meus dados
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            await sair();
+            nav("/login");
+          }}
+        >
+          Sair
+        </button>
+      </nav>
+    </div>
   );
 }
 

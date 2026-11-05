@@ -126,13 +126,13 @@ export function EnderecoFields({
           } as const)[cepSt]}
         </span>
       </div>
-      <Select id={`${prefixo}-uf`} label="UF" value={value.uf} onValue={set("uf")} options={[["", "—"], ...UFS.map((u) => [u, u] as [string, string])]} cls="c2" error={err("uf")} />
-      <Field id={`${prefixo}-municipio`} label="Cidade" value={value.municipio} onValue={(v) => onChange({ ...value, municipio: v, municipioCodigo: null })} error={err("municipio")} disabled={disabled} />
+      <Select id={`${prefixo}-uf`} label="UF" value={value.uf} onValue={set("uf")} options={[["", "—"], ...UFS.map((u) => [u, u] as [string, string])]} cls="c2 m4" error={err("uf")} />
+      <Field id={`${prefixo}-municipio`} label="Cidade" cls="c6 m8" value={value.municipio} onValue={(v) => onChange({ ...value, municipio: v, municipioCodigo: null })} error={err("municipio")} disabled={disabled} />
       <Field id={`${prefixo}-endereco`} label="Logradouro" value={value.endereco} onValue={set("endereco")} cls="c8" error={err("endereco")} disabled={disabled} autoComplete="address-line1" />
       <div ref={numeroRef} style={{ display: "contents" }}>
-        <Field id={`${prefixo}-numero`} label="Número" value={value.numero} onValue={set("numero")} cls="c4" error={err("numero")} disabled={disabled} />
+        <Field id={`${prefixo}-numero`} label="Número" value={value.numero} onValue={set("numero")} cls="c4 m4" error={err("numero")} disabled={disabled} />
       </div>
-      <Field id={`${prefixo}-complemento`} label="Complemento" value={value.complemento} onValue={set("complemento")} hint="Opcional" disabled={disabled} />
+      <Field id={`${prefixo}-complemento`} label="Complemento" cls="c6 m8" value={value.complemento} onValue={set("complemento")} hint="Opcional" disabled={disabled} />
       <Field id={`${prefixo}-bairro`} label="Bairro" value={value.bairro} onValue={set("bairro")} error={err("bairro")} disabled={disabled} />
     </div>
   );

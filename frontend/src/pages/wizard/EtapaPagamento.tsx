@@ -202,10 +202,10 @@ export function EtapaPagamento() {
               <Field id="r-doc" label={outra ? "CPF do responsável" : "CNPJ"} value={resp.documento} onValue={setR("documento")} cls="c4" mask={outra ? "cpf" : "cnpj"} inputMode="numeric" error={errors["responsavel.documento"]} />
               {outra ? (
                 <>
-                  <Field id="r-nasc" label="Data de nascimento" value={resp.dataNascimento} onValue={setR("dataNascimento")} cls="c3" mask="date" inputMode="numeric" placeholder="dd/mm/aaaa" error={errors["responsavel.dataNascimento"]} />
-                  <Select id="r-sexo" label="Sexo" value={resp.sexo} onValue={setR("sexo")} options={[["", "Selecione"], ...SEXOS]} error={errors["responsavel.sexo"]} />
-                  <Select id="r-civil" label="Estado civil" value={resp.estadoCivil} onValue={setR("estadoCivil")} options={[["", "Selecione"], ...ESTADOS_CIVIS.map((e): [string, string] => [e, e])]} error={errors["responsavel.estadoCivil"]} />
-                  <Field id="r-rg" label="RG (opcional)" value={resp.rg} onValue={setR("rg")} cls="c3" error={errors["responsavel.rg"]} />
+                  <Field id="r-nasc" label="Data de nascimento" value={resp.dataNascimento} onValue={setR("dataNascimento")} cls="c3 m6" mask="date" inputMode="numeric" placeholder="dd/mm/aaaa" error={errors["responsavel.dataNascimento"]} />
+                  <Select id="r-sexo" label="Sexo" value={resp.sexo} onValue={setR("sexo")} options={[["", "Selecione"], ...SEXOS]} cls="c3 m6" error={errors["responsavel.sexo"]} />
+                  <Select id="r-civil" label="Estado civil" value={resp.estadoCivil} onValue={setR("estadoCivil")} options={[["", "Selecione"], ...ESTADOS_CIVIS.map((e): [string, string] => [e, e])]} cls="c3 m6" error={errors["responsavel.estadoCivil"]} />
+                  <Field id="r-rg" label="RG (opcional)" value={resp.rg} onValue={setR("rg")} cls="c3 m6" error={errors["responsavel.rg"]} />
                   <Field id="r-email" label="E-mail" type="email" value={resp.email} onValue={setR("email")} cls="c6" error={errors["responsavel.email"]} />
                   <Field id="r-cel" label="Celular (WhatsApp)" value={resp.celular} onValue={setR("celular")} cls="c3" mask="phone" inputMode="tel" error={errors["responsavel.celular"]} />
                   <Field id="r-tel" label="Telefone" value={resp.telefone} onValue={setR("telefone")} cls="c3" mask="phone" inputMode="tel" error={errors["responsavel.telefone"]} />

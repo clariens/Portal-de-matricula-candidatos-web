@@ -4,6 +4,13 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
 
 ## [Não lançado]
 ### Adicionado
+- **Portal confortável no celular.** No topo, quem está logado vê o logo, a área de interesse e o botão "Menu"
+  (Minhas inscrições, Meus dados, Sair). A matrícula deixou de estourar a largura da tela: as 4 etapas cabem lado
+  a lado e o resumo da vaga começa recolhido. O rodapé da matrícula fica preso ao pé da tela, com o botão
+  principal largo. Os campos curtos ficam em pares (UF e cidade, número e complemento, sexo e estado civil, CPF e
+  RG). Os campos usam fonte de 16 px, para o iPhone não dar zoom ao tocar, e os botões têm pelo menos 46 px. O
+  login fica mais enxuto, o visor de documentos abre em tela cheia e os filtros rolam na horizontal. Conferido no
+  fluxo inteiro em 390 px, sem rolagem lateral.
 - **Meus dados.** Tela `/meus-dados` (link "Meus dados" no topo), como o "Meus Dados" do Processo Seletivo:
   e-mail, celular, telefone e endereço (`alterarPessoaFisica.json`) e troca de senha com a senha atual
   (`alterarSenhaPessoa.json`). O `idPessoa` vem da sessão; senhas fora do log; com reCAPTCHA na página, a troca

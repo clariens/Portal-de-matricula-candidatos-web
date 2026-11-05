@@ -16,6 +16,8 @@ export const ETAPAS: { id: Etapa; nome: string; sub: string; titulo: string }[] 
   { id: "conclusao", nome: "Conclusão", sub: "Contrato e disciplinas", titulo: "Matrícula concluída" },
 ];
 const idx = (e: Etapa) => ETAPAS.findIndex((x) => x.id === e);
+/** Mesmo corte do CSS (`.wiz` vira uma coluna). */
+const CELULAR = window.matchMedia("(max-width: 900px)");
 
 interface WizardCtx {
   insc: Inscricao;
@@ -148,11 +150,12 @@ export function Wizard() {
               );
             })}
           </ol>
-          <div className="card sum">
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          {/* no celular o resumo começa recolhido, para o formulário aparecer logo */}
+          <details className="card sum" open={!CELULAR.matches}>
+            <summary>
               <Hexa path={ICON_ESTETOSCOPIO} size={34} />
               <span className="eyebrow">Sua vaga em {insc.curso}</span>
-            </div>
+            </summary>
             <dl>
               <dt>Curso</dt>
               <dd>{insc.curso}</dd>
@@ -163,7 +166,7 @@ export function Wizard() {
               <dt>Concurso</dt>
               <dd className="mono">{insc.codConcurso}</dd>
             </dl>
-          </div>
+          </details>
         </aside>
         <div>
           <EtapaView key={atual} />

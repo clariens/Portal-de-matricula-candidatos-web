@@ -37,6 +37,11 @@ h1,h2{letter-spacing:-.01em}
 .topbar nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
 .topbar nav button{background:transparent;border:1px solid var(--line);color:var(--on-deep);border-radius:999px;padding:6px 12px;cursor:pointer;font-size:13px}
 .topbar nav button:hover{background:var(--surface-2)}
+.topbar nav button[aria-current="page"]{background:var(--brand-soft);border-color:var(--brand-soft)}
+/* navegação de quem está logado: no celular, recolhida no botão "Menu" */
+.conta{margin-left:auto;display:flex}
+.menu-botao{display:none;align-items:center;gap:6px;background:transparent;border:1px solid var(--line);color:var(--on-deep);border-radius:999px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer}
+.menu-botao[aria-expanded="true"]{background:var(--brand-soft);border-color:var(--brand-soft)}
 /* cabeçalho: área de interesse (subgrupos do Processo Seletivo) e cadastre-se */
 .areas{position:relative}
 .areas-botao{background:transparent;border:1px solid var(--line);color:var(--on-deep);border-radius:999px;padding:6px 14px;cursor:pointer;font-size:13px;font-weight:600}
@@ -142,7 +147,7 @@ body.tela-login .topbar{background:rgba(255,255,255,.72);backdrop-filter:blur(8p
 
 /* wizard */
 .wiz{display:grid;grid-template-columns:280px minmax(0,1fr);gap:24px;align-items:start}
-@media (max-width:900px){.wiz{grid-template-columns:1fr}}
+@media (max-width:900px){.wiz{grid-template-columns:minmax(0,1fr);gap:14px}.rail{min-width:0}}
 .rail{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);display:flex;flex-direction:column;gap:16px}
 @media (max-width:900px){.rail{position:static}}
 .steps{list-style:none;margin:0;padding:18px;display:flex;flex-direction:column;gap:4px}
@@ -153,7 +158,20 @@ body.tela-login .topbar{background:rgba(255,255,255,.72);backdrop-filter:blur(8p
 .steps li.done{color:var(--ink)}
 .steps li.done .n{background:var(--med);border-color:var(--med);color:#fff}
 .steps li small{display:block;font-weight:500;font-size:12px;color:var(--muted)}
-@media (max-width:900px){.steps{flex-direction:row;overflow-x:auto;padding:10px}.steps li{flex:none}.steps li small{display:none}}
+/* celular/tablet: as 4 etapas lado a lado, número em cima e nome embaixo, sem rolagem lateral */
+@media (max-width:900px){
+  .steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;padding:8px}
+  .steps li{padding:8px 0;justify-content:center;text-align:center;font-size:11.5px;letter-spacing:-.01em;min-width:0}
+  .steps li,.steps li button{flex-direction:column;gap:6px}
+  .steps li > span:last-child,.steps li button > span:last-child{overflow:hidden;text-overflow:ellipsis;max-width:100%}
+  .steps li small{display:none}}
+.sum summary{display:flex;gap:10px;align-items:center;list-style:none;pointer-events:none}
+.sum summary::-webkit-details-marker{display:none}
+@media (max-width:900px){
+  .sum{padding:12px 14px}
+  .sum summary{pointer-events:auto;cursor:pointer;min-height:34px}
+  .sum summary::after{content:"";margin-left:auto;width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg) translateY(-3px);transition:transform .15s}
+  .sum[open] summary::after{transform:rotate(-135deg) translateY(-1px)}}
 .sum{padding:18px;background-image:linear-gradient(var(--surface),var(--surface)),var(--grad-brand);background-origin:border-box;background-clip:padding-box,border-box;border-top:3px solid transparent;display:flex;flex-direction:column;gap:10px;font-size:13px}
 .sum dl{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 12px}
 .sum dt{color:var(--muted)}
@@ -285,6 +303,7 @@ a{color:var(--brand)}
 .pix-codigo{display:grid;gap:4px;font-size:12px;color:var(--muted)}
 .pix-codigo textarea{width:100%;font:13px/1.4 var(--f-mono);color:var(--ink);background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:8px;resize:none;word-break:break-all}
 @media (max-width:640px){.parcela-pix{grid-template-columns:minmax(0,1fr);justify-items:center}.pix-dados{justify-self:stretch}}
+.acoes-direita{display:flex;justify-content:flex-end;margin-top:12px}
 .cep-group{display:flex;gap:8px;align-items:stretch}
 .btn-icon{padding:0;width:44px;min-width:44px;border-radius:10px}
 .field .hint[aria-live]{min-height:18px}
@@ -314,3 +333,82 @@ a{color:var(--brand)}
 .resumo-inscricao dl{display:flex;flex-wrap:wrap;gap:12px 28px;margin:14px 0 0}
 .resumo-inscricao dt{font-size:12px;color:var(--muted)}
 .resumo-inscricao dd{margin:2px 0 0;font-weight:600}
+
+/* ---- celular: toques de pelo menos 44 px, ação principal sempre à mão e nada de rolagem lateral ---- */
+@media (max-width:900px){.steps li button{flex-direction:column;gap:6px;justify-content:center}}
+@media (max-width:760px){.m4{grid-column:span 4}.m6{grid-column:span 6}.m8{grid-column:span 8}.grid{gap:14px 12px}}
+@media (max-width:640px){
+  body{font-size:15px;-webkit-tap-highlight-color:transparent}
+  .input{font-size:16px} /* abaixo de 16 px o iPhone dá zoom ao focar o campo */
+  .btn{min-height:46px}
+  .btn-sm{min-height:42px}
+  .wrap{padding-block:18px 40px}
+  .page-head{margin-bottom:14px;gap:10px;align-items:center}
+  .page-head .btn{min-height:40px;padding:8px 14px;font-size:14px}
+  .panel{padding:18px 16px;gap:16px}
+  .panel + .panel{margin-top:12px}
+  .panel h2{font-size:19px}
+  .card{border-radius:14px}
+  .alert{font-size:14px}
+
+  /* topo de quem está logado: logo, área de interesse e "Menu" */
+  .menu-botao{display:inline-flex}
+  .conta nav{display:none;position:absolute;top:calc(100% + 3px);left:0;right:0;flex-direction:column;gap:2px;margin:0;padding:8px 12px 12px;background:var(--surface);border-bottom:1px solid var(--line);box-shadow:0 14px 28px rgba(36,20,120,.14)}
+  .conta nav.aberto{display:flex}
+  .conta nav button{text-align:left;border:0;border-radius:10px;padding:13px 14px;font-size:15px;font-weight:600}
+  .areas{position:static}
+  .areas-botao{white-space:nowrap}
+  .areas-menu{left:12px;right:12px;top:calc(100% + 6px);min-width:0;max-height:calc(100dvh - 90px);overflow:auto}
+  .areas-menu a,.areas-item.bloqueado{padding:11px 8px}
+
+  /* login: o formulário aparece logo; a apresentação fica enxuta */
+  .login{gap:20px}
+  .hero{gap:12px;padding:0}
+  .hexes .hx{width:34px;height:39px}
+  .hexes .hx svg{width:17px;height:17px}
+  .hero p{font-size:14px}
+  .ecg{height:44px}
+  .brands{display:none}
+  .login-card{padding:22px 18px;gap:16px}
+  .login-logo{display:none}
+
+  /* rodapé da matrícula preso ao pé da tela, com o botão principal largo */
+  .foot{flex-direction:column-reverse;align-items:stretch;gap:10px}
+  .wiz .foot{flex-direction:row;align-items:center;flex-wrap:nowrap}
+  .foot .btn{flex:1 1 auto;padding-inline:14px}
+  .foot > span.muted{flex:0 1 40%;font-size:12px!important;line-height:1.3}
+  .foot > div{flex:1 1 auto;display:flex;flex-wrap:wrap;gap:6px!important;justify-content:flex-end}
+  .foot > div > span{flex-basis:100%;text-align:right;font-size:12px!important}
+  .wiz .foot{position:sticky;bottom:0;z-index:15;margin:16px -16px 0;padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));background:rgba(247,248,251,.94);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-top:1px solid var(--line)}
+  .wiz .foot .btn-ghost{flex:0 0 auto}
+  .toast{bottom:calc(100px + env(safe-area-inset-bottom,0px))}
+
+  /* minhas inscrições */
+  .ins{padding:16px;gap:12px}
+  .ins h3{font-size:16.5px}
+  .ins .meta{gap:2px 14px}
+  .ins .actions .btn{flex:1 1 calc(50% - 8px)}
+  .ins .actions:empty{display:none}
+  .banner-call{padding:14px}
+  .banner-call .btn{width:100%}
+
+  /* documentos e visor em tela cheia */
+  .doc{padding:12px;gap:10px 12px;grid-template-columns:auto minmax(0,1fr)}
+  .doc .right{grid-column:1/-1}
+  .doc .right .btn{flex:1 1 auto}
+  .filter{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;margin-inline:-2px;padding:2px}
+  .filter::-webkit-scrollbar{display:none}
+  .filter button{flex:none;padding:8px 14px}
+  .visor{width:100vw;height:100dvh;max-width:none;max-height:none;border:0;border-radius:0}
+  .visor header{padding:10px 12px calc(10px);padding-top:calc(10px + env(safe-area-inset-top,0px))}
+
+  /* pagamento e conclusão */
+  .acoes-direita .btn{flex:1}
+  .choice{padding:14px}
+  .voucher .input{min-width:0}
+  .voucher .btn{flex:none}
+  .done-hero{padding:20px;gap:14px}
+  .pix-qr{width:min(240px,100%);height:auto;aspect-ratio:1}
+  .resumo-inscricao dl{gap:10px 20px}
+}
+@media (max-width:380px){.areas-botao{padding:6px 9px}.menu-botao{padding:7px 10px}.brand-logo img{height:26px}}
