@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, ApiError } from "../api/client";
+import { ApiError } from "../api/client";
 import type { Inscricao } from "../api/types";
 import { useAuth } from "../components/auth";
 import { Alert, Chip } from "../components/ui";
-import { preCarregar } from "../lib/cacheTelas";
+import { cacheTelas, preCarregar } from "../lib/cacheTelas";
 
 export const SITUACAO_TOM: Record<string, string> = {
   Convocado: "info",
@@ -22,7 +22,7 @@ export function Historico() {
   const [erro, setErro] = useState<string | null>(null);
 
   useEffect(() => {
-    api.inscricoes()
+    cacheTelas.inscricoes() // volta para esta tela na hora; o cache sai quando a matrícula grava algo
       .then((lista) => {
         setItens(lista);
         preCarregar(lista); // contrato e documentos abrem na hora depois (boleto e PIX não: geram cobrança)

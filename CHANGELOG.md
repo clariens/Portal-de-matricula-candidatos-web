@@ -4,6 +4,12 @@ Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versioname
 
 ## [Não lançado]
 ### Adicionado
+- **Minhas inscrições e Meus dados sem buscar de novo.** As duas telas entram no cache da aba
+  (`lib/cacheTelas.ts`). Voltar para elas abre na hora, e Meus dados já vem adiantado ao carregar o histórico. O
+  cache sai sozinho quando o portal grava algo que pode mudá-lo: qualquer gravação numa inscrição tira a lista,
+  Meus dados ("Seus dados" grava contato e endereço) e o que é daquela inscrição; salvar Meus dados guarda o que o
+  servidor devolveu; trocar a senha não mexe. Continua valendo 5 min, porque o Lyceum pode mudar por fora (ex.:
+  pagamento compensado), e é apagado ao entrar, ao sair e quando a sessão expira.
 - **Portal confortável no celular.** No topo, quem está logado vê o logo, a área de interesse e o botão "Menu"
   (Minhas inscrições, Meus dados, Sair). A matrícula deixou de estourar a largura da tela: as 4 etapas cabem lado
   a lado e o resumo da vaga começa recolhido. O rodapé da matrícula fica preso ao pé da tela, com o botão

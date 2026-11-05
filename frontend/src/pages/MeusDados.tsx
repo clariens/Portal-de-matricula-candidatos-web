@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import type { MeusDados as Dados } from "../api/types";
 import { EnderecoFields, validarEndereco, type EnderecoForm } from "../components/EnderecoFields";
+import { cacheTelas } from "../lib/cacheTelas";
 import { Alert, Field, Spin, useToast } from "../components/ui";
 import { digits, emailValido, maskPhone } from "../lib/format";
 
@@ -47,7 +48,7 @@ export function MeusDados() {
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
-    api.meusDados().then((d) => setF(paraForm(d)))
+    cacheTelas.meusDados().then((d) => setF(paraForm(d)))
       .catch((e) => setErroCarga(e instanceof ApiError ? e.message : "Não foi possível carregar seus dados."));
   }, []);
 
@@ -70,6 +71,7 @@ export function MeusDados() {
         email: f.email, celular: f.celular, telefone: f.telefone || null,
         endereco: { ...f.endereco, complemento: f.endereco.complemento || null },
       });
+      cacheTelas.guardarMeusDados(d);
       setF(paraForm(d));
       toast("Dados salvos.");
     } catch (err) {

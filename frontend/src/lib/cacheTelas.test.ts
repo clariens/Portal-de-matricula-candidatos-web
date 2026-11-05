@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
+  inscricoes: vi.fn(),
+  meusDados: vi.fn(),
   inscricao: vi.fn(),
   matricula: vi.fn(),
   documentos: vi.fn(),
@@ -11,7 +13,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../api/client", () => ({ api }));
 
 import type { Inscricao } from "../api/types";
-import { cacheTelas, preCarregar } from "./cacheTelas";
+import { cacheTelas, invalidarApos, preCarregar } from "./cacheTelas";
 
 const insc = (acoes: Inscricao["acoes"], ref = "REF123"): Inscricao =>
   ({ codCandidato: "2027100000391", ref, acoes, situacao: "Pré-Matriculado" }) as Inscricao;
@@ -22,6 +24,7 @@ describe("cacheTelas", () => {
   beforeEach(() => {
     cacheTelas.limpar();
     Object.values(api).forEach((f) => f.mockReset());
+    api.meusDados.mockResolvedValue({ email: "a@exemplo.com" });
   });
 
   it("repete a mesma busca enquanto vale e busca de novo depois de limpar", async () => {
@@ -67,5 +70,48 @@ describe("cacheTelas", () => {
     await esperar();
     expect(api.matricula).not.toHaveBeenCalled();
     expect(api.documentos).not.toHaveBeenCalled();
+  });
+});
+
+describe("cacheTelas: inscrições e meus dados", () => {
+  beforeEach(() => {
+    cacheTelas.limpar();
+    Object.values(api).forEach((f) => f.mockReset());
+    api.inscricoes.mockResolvedValue([]);
+    api.meusDados.mockResolvedValue({ email: "a@exemplo.com" });
+    api.matricula.mockResolvedValue({});
+  });
+
+  it("voltar para Minhas inscrições e Meus dados não busca de novo", async () => {
+    await cacheTelas.inscricoes();
+    await cacheTelas.inscricoes();
+    await cacheTelas.meusDados();
+    await cacheTelas.meusDados();
+    expect(api.inscricoes).toHaveBeenCalledTimes(1);
+    expect(api.meusDados).toHaveBeenCalledTimes(1);
+  });
+
+  it("gravar na matrícula tira a lista, meus dados e o que é daquela inscrição; as outras ficam", async () => {
+    const tudo = () => Promise.all([cacheTelas.inscricoes(), cacheTelas.meusDados(), cacheTelas.matricula("A"), cacheTelas.matricula("B")]);
+    await tudo();
+    invalidarApos("/inscricoes/A/pagamento");
+    await tudo();
+    expect(api.inscricoes).toHaveBeenCalledTimes(2);
+    expect(api.meusDados).toHaveBeenCalledTimes(2); // "Seus dados" grava contato e endereço da pessoa
+    expect(api.matricula.mock.calls.map((c) => c[0])).toEqual(["A", "B", "A"]);
+  });
+
+  it("salvar meus dados guarda o que voltou; trocar a senha e recuperar senha não mexem no cache", async () => {
+    await Promise.all([cacheTelas.inscricoes(), cacheTelas.meusDados()]);
+    invalidarApos("/meus-dados/senha");
+    invalidarApos("/auth/recuperar-senha");
+    await cacheTelas.meusDados();
+    expect(api.meusDados).toHaveBeenCalledTimes(1);
+    invalidarApos("/meus-dados");
+    cacheTelas.guardarMeusDados({ email: "novo@exemplo.com" } as never);
+    await expect(cacheTelas.meusDados()).resolves.toEqual({ email: "novo@exemplo.com" });
+    await cacheTelas.inscricoes();
+    expect(api.meusDados).toHaveBeenCalledTimes(1);
+    expect(api.inscricoes).toHaveBeenCalledTimes(1);
   });
 });

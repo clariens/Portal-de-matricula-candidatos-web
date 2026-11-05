@@ -53,6 +53,9 @@ function pushLog(l: ApiLog) {
 
 let onUnauthorized: (() => void) | null = null;
 export const setUnauthorizedHandler = (fn: () => void) => (onUnauthorized = fn);
+/** Avisado a cada gravação, mesmo com erro (um envio pode ter gravado parte), para o cache das telas. */
+let onWrite: ((path: string) => void) | null = null;
+export const setWriteHandler = (fn: (path: string) => void) => (onWrite = fn);
 
 /** Chamada ao BFF. `arquivo`: a resposta de sucesso é um arquivo (Blob); erros continuam vindo em JSON. */
 async function request<T>(method: string, path: string, body?: unknown, arquivo = false): Promise<T> {
@@ -71,8 +74,10 @@ async function request<T>(method: string, path: string, body?: unknown, arquivo 
       body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
     });
   } catch {
+    if (method !== "GET") onWrite?.(path);
     throw new ApiError(0, "Sem conexão com o servidor. Verifique sua internet e tente de novo.");
   }
+  if (method !== "GET") onWrite?.(path);
   const data = res.status === 204 ? null : arquivo && res.ok ? await res.blob() : await res.json().catch(() => null);
   pushLog({
     t: new Date().toLocaleTimeString("pt-BR"),

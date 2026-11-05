@@ -1,10 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
-import { api, setUnauthorizedHandler } from "../api/client";
+import { api, setUnauthorizedHandler, setWriteHandler } from "../api/client";
 import type { Pessoa } from "../api/types";
 import { Spin } from "./ui";
 import { limparAnexos } from "../lib/anexosLocais";
-import { cacheTelas } from "../lib/cacheTelas";
+import { cacheTelas, invalidarApos } from "../lib/cacheTelas";
 
 interface AuthState {
   pessoa: Pessoa | null;
@@ -24,11 +24,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cacheTelas.limpar();
       setPessoa(null);
     });
+    setWriteHandler(invalidarApos);
     api.me().then(setPessoa).catch(() => setPessoa(null)).finally(() => setCarregando(false));
   }, []);
 
   const entrar = useCallback(async (login: string, senha: string) => {
-    setPessoa(await api.login(login, senha));
+    const p = await api.login(login, senha);
+    cacheTelas.limpar(); // nada de outra conta fica para trás
+    setPessoa(p);
   }, []);
   const sair = useCallback(async () => {
     await api.logout().catch(() => {});

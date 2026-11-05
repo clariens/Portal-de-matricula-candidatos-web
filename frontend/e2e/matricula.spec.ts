@@ -252,6 +252,12 @@ test("fluxo completo de matrícula (dublê do Lyceum)", async ({ page }) => {
   const card = page.locator("article.ins", { hasText: "#2027100000162" });
   await expect(card.locator(".chip")).toHaveText("Pré-Matriculado");
   await expect(card.getByRole("button", { name: "Ver contrato" })).toBeVisible();
+  // daqui em diante só leitura: voltar para Minhas inscrições e Meus dados usa o cache, sem buscar de novo
+  const buscas: string[] = [];
+  page.on("request", (r) => {
+    const u = new URL(r.url()).pathname;
+    if (r.method() === "GET" && (u === "/api/v1/inscricoes" || u === "/api/v1/meus-dados")) buscas.push(u);
+  });
 
   // contrato e documentos de ingresso abrem em telas próprias
   await card.getByRole("button", { name: "Ver contrato" }).click();
@@ -269,10 +275,17 @@ test("fluxo completo de matrícula (dublê do Lyceum)", async ({ page }) => {
   await expect(page.locator("dialog.visor").getByRole("img", { name: "CPF" })).toBeVisible();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Voltar para minhas inscrições" }).click();
+  await expect(card.locator(".chip")).toHaveText("Pré-Matriculado");
 
   // meus dados: contato e endereço, e troca de senha (como "Meus Dados" do legado)
   await page.getByRole("button", { name: "Meus dados" }).click();
   await expect(page.getByRole("heading", { name: "Meus dados" })).toBeVisible();
+  await expect(page.getByLabel("E-mail")).not.toHaveValue("");
+  await page.getByRole("button", { name: "Minhas inscrições", exact: true }).click();
+  await expect(card).toBeVisible();
+  await page.getByRole("button", { name: "Meus dados" }).click();
+  await expect(page.getByLabel("E-mail")).not.toHaveValue("");
+  expect(buscas).toEqual([]); // nem a lista nem meus dados foram buscados de novo (meus dados já veio adiantado)
   await page.getByLabel("Celular (WhatsApp)").fill("34988887777");
   await page.getByRole("button", { name: "Salvar dados" }).click();
   await expect(page.getByText("Dados salvos.")).toBeVisible();
