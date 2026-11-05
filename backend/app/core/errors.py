@@ -4,6 +4,7 @@ Formato de erro devolvido ao front (status HTTP + corpo):
     { "erro": { "mensagem": "...", "campos": { "cpf": "CPF inválido." } } }
 """
 
+import logging
 import re
 
 from fastapi import Request
@@ -21,7 +22,9 @@ class PortalError(Exception):
 
 class NaoConfigurado(PortalError):
     def __init__(self, variavel: str):
-        super().__init__(503, f"Variável {variavel} não configurada no servidor")
+        # o nome da variável vai só para o log: o navegador não precisa saber como o servidor é configurado
+        logging.getLogger("portal").error("Variável %s não configurada no servidor", variavel)
+        super().__init__(503, "O portal está temporariamente indisponível. Tente novamente mais tarde.")
 
 
 class LyceumIndisponivel(PortalError):

@@ -70,6 +70,59 @@ def test_cookie_httponly(client):
     assert "httponly" in cookie and "samesite=lax" in cookie
 
 
+def test_cookie_em_producao_usa_host_e_secure(monkeypatch):
+    from fastapi import Response
+
+    from app.config import Settings
+    from app.core.session import SessionUser, set_session
+    s = Settings(_env_file=None, portal_session_secret="x" * 40, portal_cookie_secure=True)
+    r = Response()
+    set_session(r, SessionUser(cod_pessoa="1", login="a", nome="A", sid="s"), s)
+    cookie = r.headers["set-cookie"]
+    # __Host-: só https, Path=/ e sem Domain, então um subdomínio irmão não consegue plantar outro cookie
+    assert cookie.startswith("__Host-portal_session=") and "Secure" in cookie and "Path=/" in cookie
+    assert "Domain" not in cookie
+    monkeypatch.delenv("PORTAL_COOKIE_SECURE")
+    assert Settings(_env_file=None).portal_cookie_secure is True  # esquecer a variável não desliga o Secure
+
+
+async def test_segredo_curto_nao_sobe(monkeypatch):
+    import pytest
+
+    from app import main
+    from app.config import Settings
+    monkeypatch.setattr(main, "get_settings", lambda: Settings(_env_file=None, portal_session_secret="curto-demais"))
+    with pytest.raises(RuntimeError, match="pelo menos 32"):
+        async with main.lifespan(main.app):
+            pass
+
+
+def test_swagger_fechado_por_padrao(client):
+    # PORTAL_API_DOCS não definida (como em produção): sem o mapa da API
+    assert client.get("/api/docs").status_code == 404
+    assert client.get("/api/openapi.json").status_code == 404
+
+
+def test_health_nao_consulta_o_lyceum_a_cada_chamada(client, monkeypatch):
+    chamadas = []
+
+    async def ping():
+        chamadas.append(1)
+        return True
+
+    client.app.state.__dict__.pop("saude", None)
+    monkeypatch.setattr(client.app.state.gateway, "ping", ping)
+    for _ in range(5):
+        assert client.get("/api/v1/health").json() == {"status": "ok", "lyceum": True}
+    assert len(chamadas) == 1
+
+
+def test_mensagem_de_configuracao_nao_mostra_variavel():
+    from app.core.errors import NaoConfigurado
+    e = NaoConfigurado("LYCEUM_API_BASIC_PASSWORD")
+    assert e.status == 503 and "LYCEUM" not in e.mensagem
+
+
 def test_inscricao_de_terceiro_404(logged):
     # sem o segredo do servidor não dá para montar a referência de outra inscrição: qualquer outra é 404
     assert logged.get("/api/v1/inscricoes/" + "A" * 40 + "/candidato").status_code == 404
@@ -113,6 +166,44 @@ def test_upload_rejeita_conteudo_falso(logged):
 def test_upload_rejeita_extensao(logged):
     r = _upload(logged, "05", nome="doc.exe")
     assert r.status_code == 422
+
+
+def _png(largura, altura, modo="1"):
+    import io
+
+    from PIL import Image
+    b = io.BytesIO()
+    Image.new(modo, (largura, altura)).save(b, "PNG")
+    return b.getvalue()
+
+
+def test_upload_recusa_imagem_bomba_sem_decodificar(logged):
+    bomba = _png(13000, 13000)  # poucos KB no disco, ~2 GB de memória se fosse decodificada
+    assert len(bomba) < 100_000
+    r = _upload(logged, "05", nome="rg.png", data=bomba)
+    assert r.status_code == 422
+    assert r.json()["erro"]["campos"] == {"arquivo": "Resolução grande demais."}
+
+
+def test_upload_recusa_imagem_que_nao_abre(logged):
+    r = _upload(logged, "05", nome="rg.png", data=b"\x89PNG\r\n\x1a\n" + b"lixo" * 50)
+    assert r.status_code == 422
+    assert r.json()["erro"]["campos"] == {"arquivo": "Imagem inválida."}
+
+
+def test_preparar_imagem_reduz_sem_estourar():
+    import io
+
+    from PIL import Image
+
+    from app.services.imagens import ImagemGrandeDemais, preparar_imagem
+    jpg, mime = preparar_imagem(_png(3000, 2000, "P"), 1600)
+    assert mime == "image/jpeg" and Image.open(io.BytesIO(jpg)).size == (1600, 1067)
+    try:
+        preparar_imagem(_png(13000, 13000), 1600)
+        raise AssertionError("deveria recusar")
+    except ImagemGrandeDemais:
+        pass
 
 
 def test_pagamento_exige_documentos(logged):
@@ -299,3 +390,18 @@ def test_previa_do_documento_enviado(logged):
     assert r.status_code == 404 and r.json()["erro"]["mensagem"] == "Prévia indisponível."
     # de outra inscrição (referência forjada): 404
     assert logged.get("/api/v1/inscricoes/" + "A" * 40 + "/documentos/05/arquivo").status_code == 404
+
+
+def test_corpo_grande_demais_e_recusado_antes_de_ler(logged):
+    from app.config import get_settings
+    limite = (get_settings().portal_upload_max_mb + 1) * 1024 * 1024
+    r = logged.post(f"/api/v1/inscricoes/{ref(logged)}/documentos/05", content=b"x" * (limite + 1),
+                    headers={**H, "Content-Type": "multipart/form-data; boundary=b"})
+    assert r.status_code == 413 and r.json()["erro"]["campos"] == {"arquivo": "Arquivo grande demais."}
+
+
+def test_analise_do_navegador_nunca_vira_da_ia(logged):
+    ocr = json.dumps({"veredito": "ok", "confianca": 99, "campos": [], "alertas": [], "fonte": "ia"})
+    r = logged.post(f"/api/v1/inscricoes/{ref(logged)}/documentos/05",
+                    files={"arquivo": ("doc.pdf", PDF, "application/pdf")}, data={"ocr": ocr}, headers=H)
+    assert r.status_code == 200 and r.json()["analise"]["fonte"] == "navegador"

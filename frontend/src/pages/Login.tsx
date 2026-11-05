@@ -4,6 +4,7 @@ import { api, ApiError } from "../api/client";
 import logo from "../assets/clariens-educacao.png";
 import { useAuth } from "../components/auth";
 import { Alert, Field, Spin } from "../components/ui";
+import { destinoSeguro } from "../lib/navegacao";
 
 const ICONES = [
   { tone: "", d: <path d="M3 12h4l2-5 4 10 2-5h6" /> },
@@ -67,7 +68,7 @@ export function Login() {
     setErro(null);
     try {
       await entrar(login, senha);
-      nav((loc.state as { from?: string } | null)?.from || "/inscricoes", { replace: true });
+      nav(destinoSeguro((loc.state as { from?: string } | null)?.from), { replace: true });
     } catch (err) {
       setErro(err instanceof ApiError ? err.message : "Não foi possível entrar.");
     } finally {

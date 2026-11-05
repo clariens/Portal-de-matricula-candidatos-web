@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../../api/client";
 import type { Inscricao, PagamentoResultado, Pix } from "../../api/types";
 import { Alert, Chip, Spin, useToast } from "../../components/ui";
+import { limparJunto } from "../../lib/cacheTelas";
 import { brl } from "../../lib/format";
 
 type Cobranca = PagamentoResultado["cobranca"];
@@ -11,6 +12,7 @@ type Forma = "Boleto" | "PIX";
 // Boleto e PIX geram cobrança no banco: cada inscrição gera uma vez por página aberta (o StrictMode do React e
 // as remontagens não podem pedir de novo). "Tentar de novo" limpa a entrada daquela inscrição.
 const geracoes = new Map<string, Promise<Blob | Pix>>();
+limparJunto(() => geracoes.clear()); // ao entrar, sair ou a sessão expirar, nada de cobrança de outra conta na aba
 
 function gerar(ref: string, forma: Forma): Promise<Blob | Pix> {
   const chave = `${forma}:${ref}`;

@@ -4,7 +4,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 os.environ["PORTAL_ENV_FILE"] = "__sem_env_nos_testes__"  # nunca ler o backend/.env real
-os.environ.setdefault("PORTAL_SESSION_SECRET", "segredo-de-teste")
+os.environ.setdefault("PORTAL_SESSION_SECRET", "segredo-de-teste-so-para-os-testes-automaticos")
+os.environ.setdefault("PORTAL_COOKIE_SECURE", "false")  # o TestClient fala http: cookie Secure não voltaria
 
 from app.main import app
 from tests.fake_lyceum import FakeLyceum

@@ -30,6 +30,7 @@ from app.schemas.pagamento import (
 )
 from app.services.conferencia import conferir
 from app.services.ia_documentos import IAIndisponivel, LeitorDocumentos
+from app.services.imagens import ImagemGrandeDemais, conferir_dimensoes
 from app.services.lyceum import LyceumGateway
 from app.services.lyceum.catalogo import EXTENSOES_ACEITAS, MAGIC
 from app.services.lyceum.legado import mensagem_envio, resumo_recusas
@@ -110,7 +111,7 @@ async def anexar_documento(
     leitor: LeitorDocumentos | None = getattr(request.app.state, "leitor", None)
     if leitor:
         # Conferência com IA no servidor: o resultado do navegador é ignorado (o servidor é a fonte da verdade)
-        resultado = await _conferir_com_ia(leitor, s, request, insc, user, gw, tipo, conteudo, mime)
+        resultado = await _conferir_com_ia(leitor, s, request, insc, user, gw, tipo, nome, conteudo, mime)
         if resultado.status != "anexado":
             return resultado  # documento errado: não recebe selo; o candidato envia outro arquivo
         analise = resultado.analise
@@ -118,7 +119,8 @@ async def anexar_documento(
         analise = None
         if ocr:
             try:
-                analise = OcrResultado.model_validate(json.loads(ocr))
+                # o selo assina o que o navegador disse, sempre marcado como do navegador: não vira "conferido pela IA"
+                analise = OcrResultado.model_validate(json.loads(ocr)).model_copy(update={"fonte": "navegador"})
             except (ValueError, ValidationError):
                 analise = None  # resultado ilegível do navegador: o documento vai para conferência manual
         if analise and analise.veredito in VEREDITOS_BLOQUEADOS:
@@ -141,18 +143,38 @@ def _validar_arquivo(nome_bruto: str | None, conteudo: bytes, s: Settings) -> tu
         raise PortalError(422, "Arquivo vazio.", {"arquivo": "Arquivo vazio."})
     if not any(conteudo.startswith(m) for m in MAGIC[mime]):
         raise PortalError(422, "O conteúdo do arquivo não corresponde à extensão.", {"arquivo": "Arquivo inválido."})
+    if mime.startswith("image/"):
+        try:
+            conferir_dimensoes(conteudo)  # só o cabeçalho: imagem "bomba" é recusada antes de decodificar
+        except ImagemGrandeDemais:
+            raise PortalError(422, "Imagem com resolução grande demais. Envie uma foto comum do celular ou um PDF.",
+                              {"arquivo": "Resolução grande demais."}) from None
+        except OSError:
+            raise PortalError(422, "Não foi possível abrir a imagem. Envie outro arquivo.",
+                              {"arquivo": "Imagem inválida."}) from None
     return nome, mime
 
 
 async def _conferir_com_ia(leitor, s: Settings, request: Request, insc: Inscricao, user: SessionUser,
-                           gw: LyceumGateway, tipo: str, conteudo: bytes, mime: str) -> DocumentoStatus:
+                           gw: LyceumGateway, tipo: str, arquivo_nome: str, conteudo: bytes,
+                           mime: str) -> DocumentoStatus:
     """Lê com IA e decide. Devolve o status "anexado" com a análise, ou o status atual se for documento errado."""
     esperado = next((d for d in await gw.listar_documentos(user.cod_pessoa, insc) if d.codigo == tipo), None)
     if not esperado:
         raise PortalError(404, "Documento não solicitado neste processo.")
-    # limite de análises por documento (por instância): evita gasto descontrolado com trocas repetidas
+    # checagens baratas antes de gastar com a IA: o legado recusaria do mesmo jeito depois
+    if esperado.status in ("enviado", "em_conferencia", "aprovado"):
+        raise PortalError(409, "Este documento já foi entregue.")
+    extensao = os.path.splitext(arquivo_nome)[1].lower().lstrip(".")
+    if extensao not in esperado.extensoes:
+        raise PortalError(422, f"Formato não aceito. Envie: {', '.join(e.upper() for e in esperado.extensoes)}.",
+                          {"arquivo": "Formato não aceito."})
+    # limite de análises por documento (por instância): evita gasto descontrolado com trocas repetidas. A chave é
+    # a pessoa (não a sessão), para que entrar de novo não zere a conta
     tentativas = request.app.state.tentativas_ia
-    chave = (user.sid, insc.cod_candidato, tipo)
+    if len(tentativas) > 50_000:  # memória da instância limitada; o teto global é o da conta da Anthropic
+        tentativas.clear()
+    chave = (user.cod_pessoa, insc.cod_candidato, tipo)
     tentativas[chave] = tentativas.get(chave, 0) + 1
     if tentativas[chave] > s.ia_documentos_tentativas_por_documento:
         resultado = OcrResultado(veredito="erro", fonte="ia", alertas=[
@@ -178,7 +200,7 @@ async def enviar_documentos(request: Request, insc: Inscricao = Insc, user: Sess
     documento: o que estiver certo segue e o que for recusado volta em `recusados` (código → motivo).
     Aceita N documentos, mas o navegador manda UM por chamada (progresso na tela e requisições pequenas).
     No legado o primeiro envio FINALIZA a inscrição."""
-    form = await request.form(max_files=40)
+    form = await request.form(max_files=8)
     anexos, recusados = {}, {}
     for chave, valor in form.multi_items():
         tipo = chave.removeprefix("arquivo_")

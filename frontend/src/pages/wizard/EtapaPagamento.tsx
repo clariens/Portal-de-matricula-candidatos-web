@@ -153,11 +153,16 @@ export function EtapaPagamento() {
       await recarregar();
       ir("conclusao");
     } catch (e) {
-      if (e instanceof ApiError) {
+      if (!(e instanceof ApiError) || e.status === 0 || e.status >= 500) {
+        // Sem resposta não quer dizer que não gravou: confere a inscrição antes de deixar confirmar de novo
+        setErro("Não recebemos a confirmação do Processo Seletivo. O pagamento pode ter sido registrado: confira " +
+                "em Minhas inscrições antes de tentar de novo.");
+        await recarregar().catch(() => {});
+      } else {
         setErrors(e.campos);
         setErro(e.message);
         toast(e.message);
-      } else setErro("Não foi possível confirmar o pagamento.");
+      }
     } finally {
       setEnviando(false);
     }

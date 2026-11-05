@@ -43,14 +43,16 @@ class Settings(BaseSettings):
     ia_documentos_modelo: str = "claude-opus-5-5"
     ia_documentos_esforco: Literal["low", "medium", "high"] = "low"
     ia_documentos_max_px: int = 2000  # maior lado da imagem enviada (custo cresce com a área)
-    ia_documentos_timeout: float = 60.0
+    ia_documentos_timeout: float = 25.0  # com 1 nova tentativa, cabe no limite de 60 s da função na Vercel
+    ia_documentos_pdf_paginas: int = 2  # só as primeiras páginas do PDF vão à IA (custo cresce por página)
     ia_documentos_concorrencia: int = 4  # chamadas simultâneas por processo (protege a cota da conta)
     ia_documentos_limite_diario_usd: float = 20.0  # acima disso, pausa a IA e manda para conferência manual
     ia_documentos_tentativas_por_documento: int = 8  # por inscrição e tipo, na sessão
 
     portal_session_secret: str = "dev-inseguro"
     portal_session_horas: int = 12
-    portal_cookie_secure: bool = False
+    portal_cookie_secure: bool = True  # false só em desenvolvimento local sem HTTPS (backend/.env)
+    portal_api_docs: bool = False  # Swagger em /api/docs: true só em desenvolvimento
     portal_cors_origins: str = "http://localhost:5173"
     portal_upload_max_mb: int = 10
 

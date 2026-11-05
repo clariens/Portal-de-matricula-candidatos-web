@@ -83,4 +83,5 @@ def normalizar_data_br(v: str | None) -> str:
     return s
 
 
-EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# sem aspas nem < > `: o e-mail é ecoado nas páginas do legado, e esses caracteres permitiriam forjar atributos HTML
+EMAIL_RE = re.compile(r"^[^@\s\"'<>`]+@[^@\s\"'<>`]+\.[^@\s\"'<>`]+$")

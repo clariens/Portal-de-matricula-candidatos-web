@@ -17,8 +17,9 @@ docker run -p 8000:8000 --env-file backend/.env portal-matricula
 | `LYCEUM_DOCUMENTOS_MODO` / `LYCEUM_PAGAMENTO_MODO` | `enviar` só depois de validado em DEV (padrão `simular`) |
 | `LYCEUM_UPLOAD_MAX_KB_POR_ARQUIVO` / `_TOTAL` | limites do Processo Seletivo de produção (confirmar com o time Lyceum) |
 | `ANTHROPIC_API_KEY`, `IA_DOCUMENTOS_ATIVA` | conferência de documentos por IA (secret; exige aval de LGPD/IA CoE) |
-| `PORTAL_SESSION_SECRET` | `python -c "import secrets; print(secrets.token_urlsafe(48))"` (secret) |
-| `PORTAL_COOKIE_SECURE` | `true` |
+| `PORTAL_SESSION_SECRET` | `python -c "import secrets; print(secrets.token_urlsafe(48))"` (secret; **mínimo de 32 caracteres**, senão o servidor não sobe) |
+| `PORTAL_COOKIE_SECURE` | `true` (é o padrão; com ele o cookie se chama `__Host-portal_session`) |
+| `PORTAL_API_DOCS` | não definir (o Swagger fica desligado em produção) |
 | `PORTAL_CORS_ORIGINS` | Vazio (mesma origem) |
 | `PORTAL_UPLOAD_MAX_MB` | `10` |
 
@@ -31,7 +32,8 @@ docker run -p 8000:8000 --env-file backend/.env portal-matricula
 ## Vercel (homologação interna)
 Um projeto só, com [Services](https://vercel.com/docs/services) (`vercel.json` na raiz):
 - `front`: `frontend/` (Vite), com fallback do SPA para `index.html`;
-- `bff`: `backend/` (FastAPI, `app.main:app`, Python 3.14, `maxDuration` 60 s);
+- `bff`: `backend/` (FastAPI, `app.main:app`, Python 3.14, `maxDuration` 60 s; os prazos do legado para upload e
+  `efetivar.json` são de 40 s para caber nesse limite, conferido por `test_prazos_cabem_no_limite_da_funcao_na_vercel`);
 - `/api/*` vai para o `bff` com o caminho original; o resto vai para o `front`. É a mesma origem, então o cookie
   da sessão funciona sem CORS.
 

@@ -1,6 +1,8 @@
 # API do BFF (`/api/v1`)
 
-A documentação interativa fica em **`/api/docs`** (Swagger do FastAPI), e o contrato em `/api/openapi.json`.
+A documentação interativa fica em **`/api/docs`** (Swagger do FastAPI), e o contrato em `/api/openapi.json`, só
+com `PORTAL_API_DOCS=true` (desenvolvimento). Em produção os dois ficam desligados; o contrato versionado está em
+`backend/openapi.json` (`scripts/export_openapi.py`).
 
 ## Convenções
 - JSON em camelCase. Datas no formato `dd/mm/aaaa`.

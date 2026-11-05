@@ -13,6 +13,6 @@ export default defineConfig({
     command: `${py} -m uvicorn tests.e2e_app:app --port 8010 --app-dir ../backend`,
     url: "http://127.0.0.1:8010/api/v1/health",
     reuseExistingServer: false,
-    env: { PORTAL_ENV_FILE: "__sem_env_no_e2e__", PORTAL_SESSION_SECRET: "e2e-segredo", PORTAL_COOKIE_SECURE: "false" },
+    env: { PORTAL_ENV_FILE: "__sem_env_no_e2e__", PORTAL_SESSION_SECRET: "e2e-segredo-so-para-o-teste-no-navegador", PORTAL_COOKIE_SECURE: "false" },
   },
 });

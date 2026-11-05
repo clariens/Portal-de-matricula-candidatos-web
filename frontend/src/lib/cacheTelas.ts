@@ -26,6 +26,9 @@ function memo<T>(chave: string, carregar: () => Promise<T>): Promise<T> {
 }
 
 const guardar = (chave: string, valor: unknown) => itens.set(chave, { em: Date.now(), p: Promise.resolve(valor) });
+/** Outros caches em memória que também saem junto (ex.: boleto e PIX já gerados na conclusão). */
+const aoLimpar = new Set<() => void>();
+export const limparJunto = (f: () => void) => aoLimpar.add(f);
 
 export const cacheTelas = {
   inscricoes: () => memo<Inscricao[]>("inscricoes", () => api.inscricoes()),
@@ -36,7 +39,10 @@ export const cacheTelas = {
   matricula: (ref: string) => memo<Matricula>(`matricula:${ref}`, () => api.matricula(ref)),
   documentos: (ref: string) => memo<DocumentoStatus[]>(`documentos:${ref}`, () => api.documentos(ref)),
   arquivo: (ref: string, tipo: string) => memo<Blob>(`arquivo:${ref}:${tipo}`, () => api.arquivoDocumento(ref, tipo)),
-  limpar: () => itens.clear(),
+  limpar: () => {
+    itens.clear();
+    aoLimpar.forEach((f) => f());
+  },
 };
 
 /** Tira do cache o que uma gravação em `path` pode ter mudado. */

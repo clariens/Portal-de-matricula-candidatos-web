@@ -44,8 +44,21 @@ async def test_boleto_pela_tela_de_termino():
     cl = _cliente()
     termino = respx.get(f"{LEG}/r/terminoIngresso/gerarBoleto").mock(return_value=_ok([base64.b64encode(PDF).decode()]))
     historico = respx.get(f"{LEG}/r/historico/gerarBoleto").mock(return_value=_ok([None]))
+    cl.sessoes.obter(SID).aberta = CAND  # a sessão acabou de confirmar esta inscrição
     assert await cl.boleto(SID, CAND, CONC) == PDF
     assert termino.called and not historico.called
+
+
+@respx.mock
+async def test_boleto_de_outra_inscricao_nao_usa_o_termino():
+    # a sessão confirmou outra inscrição: o gerarBoleto do término daria o boleto dela
+    cl = _cliente()
+    cl.sessoes.obter(SID).aberta = "2027100000999"
+    termino = respx.get(f"{LEG}/r/terminoIngresso/gerarBoleto").mock(return_value=_ok([base64.b64encode(PDF).decode()]))
+    historico = respx.get(f"{LEG}/r/historico/gerarBoleto").mock(return_value=_ok([base64.b64encode(PDF).decode()]))
+    assert await cl.boleto(SID, CAND, CONC) == PDF
+    assert historico.called and not termino.called
+    assert historico.calls.last.request.url.params["codCandidato"] == CAND
 
 
 @respx.mock
@@ -91,6 +104,20 @@ async def test_pix_com_qr_por_endereco_vira_data_uri():
         return_value=httpx.Response(200, content=base64.b64decode(PNG_B64), headers={"content-type": "image/png"}))
     pix = await cl.pix(SID, CAND, CONC)
     assert pix.qr_code == f"data:image/png;base64,{PNG_B64}" and pix.recebedor is None
+
+
+@respx.mock
+@pytest.mark.parametrize("tag", [
+    "<img src='https://outro-servidor.exemplo/qr.png'>",  # o BFF não busca nada fora do legado
+    "<img src='data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='>",  # SVG não chega ao <img> da tela
+])
+async def test_pix_recusa_qr_de_fora_do_legado_ou_svg(tag):
+    cl = _cliente()
+    respx.post(f"{LEG}/r/historico/geraPix").mock(return_value=_ok([{"tagHtml": tag, "payload": "000201"}]))
+    fora = respx.get("https://outro-servidor.exemplo/qr.png").mock(return_value=httpx.Response(200))
+    with pytest.raises(PortalError) as e:
+        await cl.pix(SID, CAND, CONC)
+    assert e.value.status == 502 and not fora.called
 
 
 @respx.mock

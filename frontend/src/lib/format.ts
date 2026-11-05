@@ -52,7 +52,8 @@ export function cnpjValido(c: string) {
   };
   return calc(12) === +c[12] && calc(13) === +c[13];
 }
-export const emailValido = (v: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.trim());
+// igual ao servidor: sem aspas nem < > ` (o e-mail é ecoado nas páginas do legado)
+export const emailValido = (v: string) => /^[^@\s"'<>`]+@[^@\s"'<>`]+\.[^@\s"'<>`]+$/.test(v.trim());
 export const dataValida = (v: string) => {
   if (!/^\d{2}\/\d{2}\/\d{4}$/.test(v)) return false;
   const [d, m, a] = v.split("/").map(Number);

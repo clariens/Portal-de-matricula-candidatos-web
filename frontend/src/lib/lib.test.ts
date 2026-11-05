@@ -1,6 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { cnpjValido, cpfValido, dataValida, maskCEP, maskCNPJ, maskCPF, maskDate, maskPhone } from "./format";
+import { destinoSeguro, urlExternaSegura } from "./navegacao";
+
+describe("links vindos do servidor", () => {
+  it("só https", () => {
+    expect(urlExternaSegura("https://lyceum.exemplo/questionario?id=1")).toBe("https://lyceum.exemplo/questionario?id=1");
+    for (const ruim of ["javascript:alert(1)", " JavaScript:alert(1)", "data:text/html,x", "http://x.com", "/rel", "", null]) {
+      expect(urlExternaSegura(ruim)).toBeNull();
+    }
+  });
+});
 import { ACAO_POR_VEREDITO, analisar, identificarTipo } from "./ocr/analisar";
+
+describe("destino depois do login", () => {
+  it("só volta para páginas do portal", () => {
+    expect(destinoSeguro("/matricula/abc/documentos")).toBe("/matricula/abc/documentos");
+    for (const fora of ["//site.com", "/\\site.com", "https://site.com", "javascript:alert(1)", "", undefined]) {
+      expect(destinoSeguro(fora)).toBe("/inscricoes");
+    }
+  });
+});
 
 const ref = { nomeCompleto: "Ana Beatriz Rocha", cpf: "123.456.789-09", dataNascimento: "14/03/2004", cep: "38440-000" };
 

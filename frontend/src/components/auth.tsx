@@ -3,7 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { api, setUnauthorizedHandler, setWriteHandler } from "../api/client";
 import type { Pessoa } from "../api/types";
 import { Spin } from "./ui";
-import { limparAnexos } from "../lib/anexosLocais";
+import { definirDono, limparAnexos } from "../lib/anexosLocais";
 import { cacheTelas, invalidarApos } from "../lib/cacheTelas";
 
 interface AuthState {
@@ -25,18 +25,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setPessoa(null);
     });
     setWriteHandler(invalidarApos);
-    api.me().then(setPessoa).catch(() => setPessoa(null)).finally(() => setCarregando(false));
+    api.me()
+      .catch(() => null)
+      .then((p) => {
+        // documentos guardados só valem para quem está logado: sem sessão, ou vencidos, saem ao abrir o portal
+        definirDono(p?.codPessoa ?? null).catch(() => {});
+        setPessoa(p);
+      })
+      .finally(() => setCarregando(false));
   }, []);
 
   const entrar = useCallback(async (login: string, senha: string) => {
     const p = await api.login(login, senha);
     cacheTelas.limpar(); // nada de outra conta fica para trás
+    await definirDono(p.codPessoa).catch(() => {}); // documentos de outra pessoa neste navegador são apagados
     setPessoa(p);
   }, []);
   const sair = useCallback(async () => {
     await api.logout().catch(() => {});
     await limparAnexos(); // documentos pessoais não ficam guardados no computador depois de sair
     cacheTelas.limpar();
+    try {
+      sessionStorage.clear(); // forma e valor da cobrança guardados para a conclusão
+    } catch {
+      /* sem sessionStorage: nada a limpar */
+    }
     setPessoa(null);
   }, []);
 

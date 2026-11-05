@@ -3,6 +3,53 @@
 Formato: [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/). Versionamento: [SemVer](https://semver.org/lang/pt-BR/).
 
 ## [Não lançado]
+### Segurança (Lote 2 da análise de 05/11/2026)
+- **S3 · Inscrição certa no legado:**
+  - A sessão guarda qual inscrição está aberta no legado.
+  - Documentos, pagamento e boleto do término reabrem a da tela quando a aberta é outra (duas inscrições em duas
+    abas). Se o legado não reabrir, a operação para com 409, sem gravar.
+  - O boleto de outra inscrição usa só a rota do Histórico, que leva o número.
+- **S5 · Custo da IA:**
+  - Do PDF, vão só as 2 primeiras páginas (`pypdf`).
+  - O contador de tentativas é por pessoa, então entrar de novo não zera.
+  - Documento já entregue e extensão não aceita são barrados antes da IA.
+  - O prazo da IA cai para 25 s com 1 nova tentativa, dentro do limite da Vercel.
+- **S8 · Identidade no login:** o `idPessoa` vem de dentro dos formulários de "Meus Dados", e os dois precisam
+  concordar. O e-mail não aceita aspas nem `<>` (servidor e tela). Conferido no DEV (só leitura) em 05/11/2026.
+- **S12 · Uploads:**
+  - Corpo acima de `PORTAL_UPLOAD_MAX_MB` + 1 MB é recusado (413) antes de ser lido.
+  - `max_files=8`.
+  - A análise vinda do navegador fica sempre marcada como do navegador.
+- **S13 · Entradas:**
+  - Código de município só com dígitos.
+  - Tamanhos máximos no endereço, no responsável, no plano e no cupom.
+  - Link do questionário só `https:`.
+  - QR do PIX só do servidor do legado e só PNG, JPEG ou GIF.
+
+### Segurança (Lote 1 da análise de 05/11/2026, ver `docs/seguranca.md`)
+- **S1 · Imagem "bomba":** a resolução é conferida pelo cabeçalho antes de decodificar (40 MP; JPEG até 120 MP,
+  decodificado já reduzido) e o upload responde 422 antes da IA. Imagem que não abre também é recusada.
+- **S2 · Pagamento confirmado duas vezes:**
+  - Os prazos do legado para `efetivar.json` e upload caem para 40 s, dentro do limite de 60 s da função na
+    Vercel.
+  - Depois de um efetivar sem resposta, a sessão trava nova confirmação por 10 min, com o aviso "não confirme de
+    novo".
+  - Sem resposta do servidor, a tela recarrega a inscrição em vez de deixar repetir.
+- **S6 · Documentos no navegador:** cada documento guarda quem o anexou. Ao abrir o portal sem sessão, ao entrar
+  outra pessoa e depois de 24 h, os documentos são apagados. Ao sair, também o boleto e o PIX em memória e a
+  `sessionStorage`.
+- **S9 · Cookies:**
+  - `Secure` é o padrão.
+  - Com ele, o cookie se chama `__Host-portal_session`. **Todos precisam entrar de novo uma vez.**
+  - O servidor não sobe com `PORTAL_SESSION_SECRET` de menos de 32 caracteres.
+- **S10 · Exposição:**
+  - Swagger desligado por padrão (`PORTAL_API_DOCS=true` para ligar no desenvolvimento).
+  - `/health` com 30 s de cache.
+  - Mensagens do legado sanitizadas e sem nome de rota.
+  - Falta de configuração responde mensagem genérica, com a variável só no log.
+- **S11 · Dependências:** `react-router-dom` 6.30.6. O destino depois do login aceita só caminhos do portal.
+- **S14 · Log do primeiro upload:** a regex do título HTML tinha o mesmo nome de outra e o log saía vazio.
+
 ### Adicionado
 - **Minhas inscrições e Meus dados sem buscar de novo.** As duas telas entram no cache da aba
   (`lib/cacheTelas.ts`). Voltar para elas abre na hora, e Meus dados já vem adiantado ao carregar o histórico. O

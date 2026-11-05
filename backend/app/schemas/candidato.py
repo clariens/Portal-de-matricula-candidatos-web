@@ -20,15 +20,15 @@ SEXOS = {"F": "Feminino", "M": "Masculino", "O": "Outros"}
 
 
 class Endereco(ApiModel):
-    pais: str = "BRASIL"
+    pais: str = Field(default="BRASIL", max_length=60)
     cep: str
     uf: str = Field(min_length=2, max_length=2)
-    municipio: str = Field(min_length=1)
-    municipio_codigo: str | None = None
-    endereco: str = Field(min_length=1)
+    municipio: str = Field(min_length=1, max_length=100)
+    municipio_codigo: str | None = Field(default=None, pattern=r"^\d{1,8}$")  # código do Lyceum
+    endereco: str = Field(min_length=1, max_length=120)
     numero: str = Field(min_length=1, max_length=20)
-    complemento: str | None = None
-    bairro: str = Field(min_length=1)
+    complemento: str | None = Field(default=None, max_length=120)
+    bairro: str = Field(min_length=1, max_length=100)
 
     @field_validator("cep")
     @classmethod

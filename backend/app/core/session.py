@@ -20,7 +20,15 @@ from app.config import Settings, get_settings
 from app.core.errors import PortalError
 
 COOKIE = "portal_session"
+# Com Secure (produção), o prefixo __Host- impede que um subdomínio irmão (*.clariens.com.br) plante o cookie de
+# outra conta no navegador do candidato (cookie tossing). Em http://localhost o nome fica sem prefixo.
+COOKIE_SEGURO = "__Host-portal_session"
 CSRF_HEADER = "x-requested-with"
+SEGREDO_MIN = 32
+
+
+def nome_cookie(s: Settings) -> str:
+    return COOKIE_SEGURO if s.portal_cookie_secure else COOKIE
 
 sessao_atual: ContextVar[str | None] = ContextVar("sessao_atual", default=None)
 
@@ -47,7 +55,7 @@ def set_session(resp: Response, user: SessionUser, s: Settings) -> None:
         {"p": user.cod_pessoa, "l": user.login, "n": user.nome, "e": user.email, "s": user.sid}
     )
     resp.set_cookie(
-        COOKIE,
+        nome_cookie(s),
         token,
         max_age=s.portal_session_horas * 3600,
         httponly=True,
@@ -57,12 +65,12 @@ def set_session(resp: Response, user: SessionUser, s: Settings) -> None:
     )
 
 
-def clear_session(resp: Response) -> None:
-    resp.delete_cookie(COOKIE, path="/")
+def clear_session(resp: Response, s: Settings) -> None:
+    resp.delete_cookie(nome_cookie(s), path="/", secure=s.portal_cookie_secure, httponly=True, samesite="lax")
 
 
 def ler_sessao(request: Request, s: Settings) -> SessionUser | None:
-    token = request.cookies.get(COOKIE)
+    token = request.cookies.get(nome_cookie(s))
     if not token:
         return None
     try:

@@ -5,13 +5,16 @@ Divisão de papéis:
 - as regras em app/services/conferencia.py DECIDEM ✓/⚠/✗ comparando com os dados do candidato.
 O texto escrito no documento é tratado como dado, nunca como instrução.
 
-Custos: a imagem é reduzida para IA_DOCUMENTOS_MAX_PX no maior lado antes do envio (a cobrança é por área),
-cada chamada registra tokens e custo estimado no log, e há um teto diário de gasto (IA_DOCUMENTOS_LIMITE_DIARIO_USD):
-acima dele a conferência automática pausa e os documentos seguem para conferência manual.
+Custos: a imagem é reduzida para IA_DOCUMENTOS_MAX_PX no maior lado antes do envio (a cobrança é por área), do
+PDF só vão as primeiras IA_DOCUMENTOS_PDF_PAGINAS páginas, cada chamada registra tokens e custo estimado no log, e há
+um teto diário de gasto (IA_DOCUMENTOS_LIMITE_DIARIO_USD): acima dele a conferência automática pausa e os documentos
+seguem para conferência manual. Esse teto é por instância (a Vercel sobe várias): o teto global de verdade é o
+limite de gasto configurado no workspace da Anthropic.
 """
 
 import asyncio
 import base64
+import io
 import json
 import logging
 import time
@@ -21,6 +24,7 @@ from typing import Literal
 import anthropic
 from PIL import Image
 from pydantic import BaseModel, ValidationError
+from pypdf import PdfReader, PdfWriter
 
 from app.config import Settings
 from app.services.imagens import preparar_imagem
@@ -116,6 +120,21 @@ SISTEMA = (
 )
 
 
+def primeiras_paginas(conteudo: bytes, n: int) -> bytes:
+    """PDF só com as `n` primeiras páginas (o original, se já tiver até `n`). Lança erro se não abrir."""
+    leitor = PdfReader(io.BytesIO(conteudo))
+    if leitor.is_encrypted:
+        raise ValueError("PDF protegido por senha")
+    if len(leitor.pages) <= n:
+        return conteudo
+    escritor = PdfWriter()
+    for pagina in leitor.pages[:n]:
+        escritor.add_page(pagina)
+    saida = io.BytesIO()
+    escritor.write(saida)
+    return saida.getvalue()
+
+
 class IAIndisponivel(Exception):
     """Falha, recusa, timeout ou teto de gasto: o documento segue para conferência manual."""
 
@@ -142,7 +161,7 @@ class LeitorDocumentos:
     def __init__(self, s: Settings):
         self.s = s
         self.client = anthropic.AsyncAnthropic(api_key=s.anthropic_api_key, timeout=s.ia_documentos_timeout,
-                                               max_retries=2)
+                                               max_retries=1)
         self.limite = asyncio.Semaphore(s.ia_documentos_concorrencia)
         self.gasto = Gasto()
 
@@ -167,9 +186,16 @@ class LeitorDocumentos:
                         self.s.ia_documentos_limite_diario_usd)
             raise IAIndisponivel("teto diário de gasto atingido")
         if mime == "application/pdf":
+            try:
+                # um documento cabe em 1 ou 2 páginas; um PDF de 100 páginas custaria dezenas de vezes mais
+                pdf = await asyncio.wait_for(
+                    asyncio.to_thread(primeiras_paginas, conteudo, self.s.ia_documentos_pdf_paginas), timeout=10)
+            # PDF corrompido, protegido por senha ou lento demais: o pypdf lança tipos variados com arquivo malformado
+            except Exception as e:  # noqa: BLE001
+                raise IAIndisponivel(f"PDF ilegível: {type(e).__name__}") from None
             bloco = {"type": "document",
                      "source": {"type": "base64", "media_type": "application/pdf",
-                                "data": base64.standard_b64encode(conteudo).decode()}}
+                                "data": base64.standard_b64encode(pdf).decode()}}
         else:
             try:
                 img, mime_img = preparar_imagem(conteudo, self.s.ia_documentos_max_px)

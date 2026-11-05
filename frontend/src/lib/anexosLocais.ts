@@ -3,7 +3,9 @@
  *
  * Cada documento conferido fica no IndexedDB com o arquivo e o selo que o servidor devolveu na conferência;
  * no "Enviar documentos" os dois voltam ao servidor, que confere o selo antes de mandar ao Lyceum.
- * Sobrevive a recarregar a página. É apagado ao enviar, ao remover, ao sair e depois de 24 h (validade do selo).
+ * Sobrevive a recarregar a página. É apagado ao enviar, ao remover, ao sair, depois de 24 h (validade do selo),
+ * ao abrir o portal sem sessão e quando entra outra pessoa no mesmo navegador (`definirDono`): documentos de
+ * identidade não ficam para quem usar o computador depois.
  * Sem IndexedDB (navegação privada em alguns navegadores), fica só na memória da aba.
  */
 import type { OcrResultado } from "../api/types";
@@ -17,6 +19,8 @@ export interface AnexoLocal {
   analise?: OcrResultado | null;
   convertidoDe?: string;
   salvoEm: number;
+  /** codPessoa de quem anexou */
+  dono?: string;
 }
 
 const BANCO = "portal-matricula";
@@ -57,8 +61,20 @@ async function operar<T>(modo: IDBTransactionMode, f: (loja: IDBObjectStore) => 
   });
 }
 
-export async function guardarAnexo(a: Omit<AnexoLocal, "salvoEm">): Promise<void> {
-  const reg: AnexoLocal = { ...a, salvoEm: Date.now() };
+let donoAtual: string | null = null;
+
+/** Quem está usando o portal (null = ninguém logado). Apaga os vencidos e tudo que não for dessa pessoa. */
+export async function definirDono(codPessoa: string | null): Promise<void> {
+  donoAtual = codPessoa;
+  const todos = ((await operar("readonly", (l) => l.getAll() as IDBRequest<AnexoLocal[]>)) ?? [...memoria.values()]);
+  const agora = Date.now();
+  for (const a of todos) {
+    if (!codPessoa || a.dono !== codPessoa || agora - a.salvoEm > VALIDADE_MS) await removerAnexo(a.cand, a.tipo);
+  }
+}
+
+export async function guardarAnexo(a: Omit<AnexoLocal, "salvoEm" | "dono">): Promise<void> {
+  const reg: AnexoLocal = { ...a, salvoEm: Date.now(), dono: donoAtual ?? undefined };
   memoria.set(chave(a.cand, a.tipo), reg);
   await operar("readwrite", (l) => l.put(reg, chave(a.cand, a.tipo)));
 }
@@ -74,7 +90,7 @@ export async function listarAnexos(cand: string): Promise<AnexoLocal[]> {
   const agora = Date.now();
   const validos: AnexoLocal[] = [];
   for (const a of todos) {
-    if (agora - a.salvoEm > VALIDADE_MS) await removerAnexo(a.cand, a.tipo);
+    if (agora - a.salvoEm > VALIDADE_MS || (donoAtual && a.dono !== donoAtual)) await removerAnexo(a.cand, a.tipo);
     else if (a.cand === cand) validos.push(a);
   }
   return validos;

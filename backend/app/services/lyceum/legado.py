@@ -52,12 +52,13 @@ import time
 import unicodedata
 from contextvars import ContextVar
 from dataclasses import dataclass, field
+from urllib.parse import urlsplit
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
 from PIL import Image
 
-from app.core.errors import GENERIC_LOGIN, LyceumIndisponivel, PortalError
+from app.core.errors import GENERIC_LOGIN, LyceumIndisponivel, PortalError, sanitize_lyceum_error
 from app.core.http import TLS_CONTEXT
 from app.core.validators import digits, mask_cep, mask_cnpj, mask_cpf, normalizar_data_br
 from app.schemas.candidato import Candidato, CandidatoUpdate, Endereco, Municipio
@@ -94,12 +95,11 @@ CACHE_CABECALHO = 600  # s
 MSG_FORA_DO_AR = "O Processo Seletivo está fora do ar no momento. Tente novamente em alguns minutos."
 CACHE_CABECALHO_RESERVA = 120  # s; com o legado fora, não esperar de novo a cada página aberta
 CABECALHO_TIMEOUT = 4.0  # s; menu é público e não pode segurar a tela de login
-UPLOAD_TIMEOUT = 120.0
+UPLOAD_TIMEOUT = 40.0  # s; abaixo do maxDuration da Vercel (60 s), com folga para conferir "Documentos Ingresso"
 FOTO_MAX_PX, FOTO_QUALIDADE = 2000, 85  # foto enviada ao Lyceum: legível para a secretaria, ~300-600 KB
 _TAMANHO_JAVA_RE = re.compile(r"(FileSizeLimitExceeded|SizeLimitExceeded|MaxUploadSizeExceeded)", re.IGNORECASE)
-_TITULO_RE = re.compile(r"<title>(.*?)</title>", re.DOTALL | re.IGNORECASE)
+_TITULO_HTML_RE = re.compile(r"<title>(.*?)</title>", re.DOTALL | re.IGNORECASE)
 
-ID_PESSOA_RE = re.compile(r'id="idPessoa"[^>]*?value="(\d+)"', re.DOTALL)
 MSG_ERRO_RE = re.compile(r'id="msgErro"[^>]*?value="([^"]*)"', re.DOTALL)
 
 
@@ -116,6 +116,11 @@ class _Sessao:
     # Progresso do wizard por inscrição: o legado não expõe em que etapa o candidato está.
     etapas: dict[str, str] = field(default_factory=dict)
     tipos_documento: tuple[float, list[TipoDocumento]] | None = None
+    # efetivar.json enviado sem resposta definitiva (inscrição → quando): trava contra confirmar de novo
+    pagando: dict[str, float] = field(default_factory=dict)
+    # Inscrição aberta no legado (último /r/ingresso). Documentos, pagamento e término agem sobre ela sem receber
+    # o número: com duas inscrições em duas abas, sem esta marca o envio cairia na outra.
+    aberta: str | None = None
 
 
 class _Requisicao:
@@ -207,7 +212,8 @@ class SessoesLegado:
         cookies = httpx.Cookies()
         for nome, valor, dominio, caminho in d.get("c", []):
             cookies.set(nome, valor, domain=dominio, path=caminho)
-        self._s[sid] = _Sessao(cookies=cookies, expira=float(d.get("x", 0)), etapas=d.get("e") or {})
+        self._s[sid] = _Sessao(cookies=cookies, expira=float(d.get("x", 0)), etapas=d.get("e") or {},
+                               pagando=d.get("p") or {}, aberta=d.get("a"))
 
     def concluir(self, req: _Requisicao) -> list[str]:
         """Cabeçalhos Set-Cookie com a sessão atualizada (ou apagada) das sessões que a requisição tocou."""
@@ -220,7 +226,7 @@ class SessoesLegado:
                 if sid in self._removidos or not s:
                     cabecalhos.append(self._set_cookie("", 0))
                     continue
-                corpo = {"s": sid, "x": s.expira, "e": s.etapas,
+                corpo = {"s": sid, "x": s.expira, "e": s.etapas, "p": s.pagando, "a": s.aberta,
                          "c": [[c.name, c.value, c.domain, c.path] for c in s.cookies.jar]}
                 cabecalhos.append(self._set_cookie(self._fernet.encrypt(json.dumps(corpo).encode()).decode(),
                                                    SESSAO_TTL))
@@ -279,12 +285,12 @@ class ClienteLegado:
                 dados = await c.get("/r/alterarDados")
             except httpx.HTTPError:
                 raise LyceumIndisponivel(MSG_FORA_DO_AR) from None
-            m = ID_PESSOA_RE.search(dados.text) if dados.status_code == 200 else None
-            if not m:
+            id_pessoa = id_pessoa_da_pagina(dados.text) if dados.status_code == 200 else None
+            if id_pessoa is None:
                 await c.get("/logout")
                 raise LyceumIndisponivel("Resposta inválida do login do Processo Seletivo")
             self.sessoes.criar(sid, httpx.Cookies(c.cookies))
-            return int(m[1])
+            return id_pessoa
 
     async def logout(self, sid: str | None) -> None:
         s = self.sessoes.remover(sid)
@@ -400,9 +406,12 @@ class ClienteLegado:
         try:
             ret = r.json().get("lyceumRetorno") or {}
         except (ValueError, AttributeError):
-            raise LyceumIndisponivel(f"Resposta inválida do Processo Seletivo ({acao})") from None
+            log.warning("[lyceum-legado] resposta inválida em %s (HTTP %s)", acao, r.status_code)
+            raise LyceumIndisponivel("Resposta inválida do Processo Seletivo. Tente novamente em instantes.") from None
         if ret.get("tipo") != "OK":
-            raise PortalError(422, ret.get("mensagem") or f"O Processo Seletivo recusou a operação ({acao}).")
+            # a mensagem do legado vale para o candidato ("Plano não disponível…"), mas sem stack trace nem rota
+            log.warning("[lyceum-legado] %s recusado pelo legado", acao)
+            raise PortalError(422, sanitize_lyceum_error(ret.get("mensagem"), "O Processo Seletivo recusou a operação."))
         return ret.get("item")
 
     async def get_json(self, sid: str | None, path: str, params: dict | None = None) -> object:
@@ -416,9 +425,24 @@ class ClienteLegado:
         """Abre /r/ingresso (como o botão Matricule-se) e devolve os campos do form-candidato."""
         r = await self.get(sid, "/r/ingresso", params={"codCandidato": cod_candidato, "codConcurso": cod_concurso})
         campos = parse_form(r.text, "form-candidato") if r.status_code == 200 else {}
+        s = self.sessoes.obter(sid)
         if campos.get("codCandidato") != cod_candidato:
+            s.aberta = None  # o legado pode ter fechado a anterior: não dá mais para saber qual está aberta
             raise PortalError(409, "Esta inscrição não está aberta para matrícula no momento.")
+        if s.aberta != cod_candidato:
+            s.tipos_documento = None  # a lista de documentos era de outra inscrição
+        s.aberta = cod_candidato
         return campos
+
+    async def _abrir(self, sid: str | None, cod_candidato: str, cod_concurso: str) -> None:
+        """Garante que o legado está com ESTA inscrição aberta antes de documentos, pagamento ou término, que agem
+        sobre a inscrição aberta sem receber o número. Se a aberta for outra (duas inscrições em duas abas),
+        reabre esta; o legado pode então pedir para confirmar os dados de novo, e a tela leva o candidato até lá.
+        Sem marca (sessão nova), o legado ainda não abriu nenhuma pelo portal."""
+        aberta = self.sessoes.obter(sid).aberta
+        if aberta is not None and aberta != cod_candidato:
+            log.warning("[lyceum-legado] outra inscrição estava aberta no legado: reabrindo a da tela")
+            await self.form_ingresso(sid, cod_candidato, cod_concurso)
 
     async def candidato(self, sid: str | None, cod_candidato: str, cod_concurso: str) -> Candidato:
         campos = await self.form_ingresso(sid, cod_candidato, cod_concurso)
@@ -515,9 +539,10 @@ class ClienteLegado:
             "tokenCaptcha": None})
 
     # ---------- etapa 2: pagamento ----------
-    async def _pagina_pagamento(self, sid: str | None) -> str:
+    async def _pagina_pagamento(self, sid: str | None, cod_candidato: str, cod_concurso: str) -> str:
         """Abre /r/pagamentoIngresso. O legado só libera a página depois de passar por dados → documentos
         na mesma sessão; tenta reabrir os documentos uma vez antes de pedir para o candidato confirmar os dados."""
+        await self._abrir(sid, cod_candidato, cod_concurso)
         for tentativa in range(2):
             r = await self.get(sid, "/r/pagamentoIngresso")
             if r.status_code == 200 and 'id="frm-pagamento"' in r.text:
@@ -526,12 +551,13 @@ class ClienteLegado:
                 await self.get(sid, "/r/documentosPorProcesso")
         raise PortalError(409, "Confirme seus dados e documentos para seguir ao pagamento.")
 
-    async def opcoes_pagamento(self, sid: str | None) -> OpcoesPagamento:
-        pagina = parse_pagamento(await self._pagina_pagamento(sid))
+    async def opcoes_pagamento(self, sid: str | None, cod_candidato: str, cod_concurso: str) -> OpcoesPagamento:
+        pagina = parse_pagamento(await self._pagina_pagamento(sid, cod_candidato, cod_concurso))
         return OpcoesPagamento(tipos_responsavel=pagina.tipos_responsavel or ["Pessoa"], planos=pagina.planos)
 
-    async def validar_cupom(self, sid: str | None, codigo: str) -> CupomResultado:
-        await self._pagina_pagamento(sid)
+    async def validar_cupom(self, sid: str | None, cod_candidato: str, cod_concurso: str,
+                            codigo: str) -> CupomResultado:
+        await self._pagina_pagamento(sid, cod_candidato, cod_concurso)
         r = await self._req(sid, "POST", "/r/pagamentoIngresso/validarvoucher", data={"voucher": codigo}, ajax=True)
         try:
             ret = r.json().get("lyceumRetorno") or {}
@@ -548,9 +574,12 @@ class ClienteLegado:
         return CupomResultado(valido=True, mensagem=f"Cupom aplicado: {desconto:g}% de desconto.",
                               desconto_percentual=desconto)
 
-    async def efetivar_pagamento(self, sid: str | None, cod_candidato: str, dados: PagamentoIn,
+    async def efetivar_pagamento(self, sid: str | None, cod_candidato: str, cod_concurso: str, dados: PagamentoIn,
                                  simular: bool) -> PagamentoResultado:
-        pagina = parse_pagamento(await self._pagina_pagamento(sid))
+        sessao = self.sessoes.obter(sid)
+        if not simular and time.time() - sessao.pagando.get(cod_candidato, 0) < PAGANDO_TTL:
+            raise PortalError(409, MSG_PAGAMENTO_PROCESSANDO)  # um efetivar anterior ficou sem resposta
+        pagina = parse_pagamento(await self._pagina_pagamento(sid, cod_candidato, cod_concurso))
         plano = next((p for p in pagina.planos if p.codigo == dados.codigo_plano), None)
         if not plano:
             raise PortalError(422, "Escolha uma forma de pagamento.", {"codigoPlano": "Escolha um plano."})
@@ -570,19 +599,25 @@ class ClienteLegado:
                                       mensagem="Pagamento simulado (ambiente de desenvolvimento): nada foi enviado "
                                                "ao Lyceum e a matrícula não foi criada.")
         log.warning("[lyceum-legado] ENVIO REAL POST /r/pagamentoIngresso/efetivar.json: %s", resumo)
+        sessao.pagando[cod_candidato] = time.time()  # vai no cookie da resposta, mesmo se der erro
         try:
             # o legado leva mais de 20 s para criar a matrícula (visto em DEV em 04/11/2026)
             r = await self._req(sid, "POST", "/r/pagamentoIngresso/efetivar.json", json=corpo, ajax=True,
                                 timeout=EFETIVAR_TIMEOUT)
             self._retorno(r, "/r/pagamentoIngresso/efetivar.json")
-        except LyceumIndisponivel:
+        except PortalError as e:
+            if not isinstance(e, LyceumIndisponivel):
+                sessao.pagando.pop(cod_candidato, None)  # o legado respondeu e recusou: pode tentar de novo
+                raise
             # Sem resposta não quer dizer que não gravou: em DEV o legado criou a matrícula mesmo assim. Confere no
             # histórico antes de dizer que falhou (e nunca reenviar sozinho: duplicaria a cobrança).
             self.invalidar_historico(sid)
             insc = next((i for i in await self.historico(sid) if i.cod_candidato == cod_candidato), None)
             if not insc or insc.situacao == "Convocado":
-                raise
+                # pode ainda estar processando: a trava segura uma nova confirmação por PAGANDO_TTL
+                raise PortalError(409, MSG_PAGAMENTO_PROCESSANDO) from None
             log.warning("[lyceum-legado] efetivar.json sem resposta, mas o histórico mostra %s", insc.situacao)
+        sessao.pagando.pop(cod_candidato, None)
         self.invalidar_historico(sid)
         self.avancar_etapa(sid, cod_candidato, "conclusao")
         return PagamentoResultado(situacao="Pré-Matriculado", cobranca=cobranca, mensagem="Pagamento registrado.")
@@ -624,9 +659,12 @@ class ClienteLegado:
         """PDF do boleto. Como a tela de término do legado (r/terminoIngresso/gerarBoleto, na sessão que acabou de
         confirmar); se a sessão não estiver no término, como o Histórico (r/historico/gerarBoleto). Gera o boleto
         no banco: não é só leitura."""
-        tentativas = (("/r/terminoIngresso/gerarBoleto", None),
-                      ("/r/historico/gerarBoleto", {"codConcurso": cod_concurso, "codCandidato": cod_candidato}))
-        await self.get(sid, "/r/terminoIngresso")  # o gerarBoleto do término usa a inscrição aberta nessa tela
+        pelo_historico = ("/r/historico/gerarBoleto", {"codConcurso": cod_concurso, "codCandidato": cod_candidato})
+        if self.sessoes.obter(sid).aberta == cod_candidato:
+            tentativas = (("/r/terminoIngresso/gerarBoleto", None), pelo_historico)
+            await self.get(sid, "/r/terminoIngresso")  # o gerarBoleto do término usa a inscrição aberta nessa tela
+        else:
+            tentativas = (pelo_historico,)  # outra inscrição aberta (ou nenhuma): só a rota que leva o número
         for caminho, params in tentativas:
             try:
                 item = await self.get_json(sid, caminho, params)
@@ -652,7 +690,9 @@ class ClienteLegado:
         dados = item[0] if isinstance(item, list) and item and isinstance(item[0], dict) else {}
         img = re.search(r'src\s*=\s*["\']([^"\']+)["\']', str(dados.get("tagHtml") or ""))
         qr = img[1] if img else ""
-        if qr and not qr.startswith("data:image/"):
+        if qr.startswith("data:"):
+            qr = qr if _QR_DATA_RE.match(qr) else ""  # só PNG, JPEG ou GIF em base64 chegam ao <img> da tela
+        elif qr:
             qr = await self._imagem_data_uri(sid, html.unescape(qr))
         if not qr or not dados.get("payload"):
             raise PortalError(502, "O Processo Seletivo não devolveu o PIX. Tente de novo em alguns minutos.")
@@ -678,17 +718,23 @@ class ClienteLegado:
         return None
 
     async def _imagem_data_uri(self, sid: str | None, url: str) -> str:
-        """QR code vindo como endereço de imagem: baixa na sessão do candidato e devolve como data URI."""
+        """QR code vindo como endereço de imagem: baixa na sessão do candidato e devolve como data URI. Só do
+        próprio legado (URL de outro servidor seria uma requisição do BFF para fora) e só PNG, JPEG ou GIF."""
+        if url.startswith(("http:", "https:", "//")) and urlsplit(url).netloc != urlsplit(self.base).netloc:
+            log.warning("[lyceum-legado] QR do PIX aponta para outro servidor: ignorado")
+            return ""
         caminho = url.split("/processo-seletivo", 1)[-1] if url.startswith(("/", "http")) else "/" + url
         r = await self.get(sid, caminho)
-        tipo = r.headers.get("content-type", "").split(";")[0]
-        if r.status_code != 200 or not tipo.startswith("image/"):
+        tipo = r.headers.get("content-type", "").split(";")[0].strip().lower()
+        if r.status_code != 200 or tipo not in ("image/png", "image/jpeg", "image/gif"):
             return ""
         return f"data:{tipo};base64,{base64.b64encode(r.content).decode()}"
 
     # ---------- etapa 1b: documentos ----------
-    async def documentos_exigidos(self, sid: str | None) -> list[TipoDocumento]:
+    async def documentos_exigidos(self, sid: str | None, cod_candidato: str,
+                                  cod_concurso: str) -> list[TipoDocumento]:
         """Lista de documentos do processo, lida da página real (muda por concurso). Cache curto por sessão."""
+        await self._abrir(sid, cod_candidato, cod_concurso)
         s = self.sessoes.obter(sid)
         if s.tipos_documento and time.time() - s.tipos_documento[0] < CACHE_TIPOS_DOCUMENTO:
             return [t.model_copy(deep=True) for t in s.tipos_documento[1]]
@@ -729,7 +775,7 @@ class ClienteLegado:
     async def documentos(self, sid: str | None, cod_candidato: str, cod_concurso: str) -> list[DocumentoStatus]:
         entregues = await self.documentos_entregues(sid, cod_candidato, cod_concurso)
         try:
-            tipos = await self.documentos_exigidos(sid)
+            tipos = await self.documentos_exigidos(sid, cod_candidato, cod_concurso)
         except PortalError:
             if not entregues:
                 raise
@@ -778,7 +824,8 @@ class ClienteLegado:
                      conteudo: bytes, mime: str, ocr: OcrResultado | None) -> tuple[DocumentoStatus, Anexo]:
         """Valida e prepara (comprime fotos) um documento. Não guarda nada: o navegador guarda o arquivo e o
         reenvia no envio final, quando este método roda de novo para montar o que vai ao Lyceum."""
-        t = next((x for x in await self.documentos_exigidos(sid) if x.codigo == tipo), None)
+        t = next((x for x in await self.documentos_exigidos(sid, cod_candidato, cod_concurso) if x.codigo == tipo),
+                 None)
         if not t:
             raise PortalError(404, "Documento não solicitado neste processo.")
         if tipo in await self.documentos_entregues(sid, cod_candidato, cod_concurso):
@@ -818,7 +865,7 @@ class ClienteLegado:
 
         simular=True: valida e registra, sem chamar o Lyceum (o POST real FINALIZA a inscrição).
         """
-        tipos = await self.documentos_exigidos(sid)
+        tipos = await self.documentos_exigidos(sid, cod_candidato, cod_concurso)
         entregues = await self.documentos_entregues(sid, cod_candidato, cod_concurso)
         anexos = {c: a for c, a in anexos.items() if c not in entregues}  # nunca reenviar o que o Lyceum já tem
         obrigatorios = {t.codigo for t in tipos if t.obrigatorio}
@@ -878,7 +925,7 @@ class ClienteLegado:
                     codigo, len(a.conteudo))
         r = await self._req(sid, "POST", "/r/uploadDocumentosPorProcesso", files=files, timeout=UPLOAD_TIMEOUT)
         erro_legado = r.headers.get("mensagem") or (MSG_ERRO_RE.search(r.text)[1] if MSG_ERRO_RE.search(r.text) else "")
-        titulo = _TITULO_RE.search(r.text)
+        titulo = _TITULO_HTML_RE.search(r.text)
         log.warning("[lyceum-legado] resposta do primeiro envio: HTTP %s location=%s erro=%s título=%s", r.status_code,
                     r.headers.get("location", "") or "-", "sim" if erro_legado else "não",
                     " ".join(html.unescape(titulo[1]).split())[:80] if titulo else "-")
@@ -1018,6 +1065,18 @@ def _attr(attrs: str, nome: str) -> str | None:
 
 def _fold(s: str) -> str:
     return unicodedata.normalize("NFD", s or "").encode("ascii", "ignore").decode().upper().strip()
+
+
+def id_pessoa_da_pagina(pagina: str) -> int | None:
+    """idPessoa de quem entrou, lido da página "Meus Dados" (/r/alterarDados). Vem de DENTRO dos formulários, não
+    da primeira ocorrência na página: o nome e o endereço do candidato também aparecem nela, e um texto forjado
+    neles não pode trocar a identidade da sessão. Os dois formulários (dados e senha) precisam concordar
+    (conferido em DEV em 05/11/2026: ambos trazem o campo, com o mesmo valor)."""
+    dados = parse_form(pagina, "frm-pessoa-fisica").get("idPessoa", "")
+    senha = parse_form(pagina, "frm-altera-senha").get("idPessoa", dados)
+    if not dados.isdigit() or senha != dados:
+        return None
+    return int(dados)
 
 
 def parse_form(pagina: str, form_id: str) -> dict[str, str]:
@@ -1227,6 +1286,7 @@ def mensagem_envio(nomes: dict[str, str], recusados: dict[str, str]) -> str:
 
 # ---------- etapa 2: /r/pagamentoIngresso ----------
 # botão do PIX na tela de término: openModalPix(codCandidato, codConcurso, valor, idCobranca)
+_QR_DATA_RE = re.compile(r"data:image/(png|jpeg|gif);base64,[A-Za-z0-9+/=\s]+$")
 _PIX_RE = re.compile(r"openModalPix\(\s*['\"]?(?P<cand>\d+)['\"]?\s*,\s*['\"]?(?P<conc>\d+)['\"]?\s*,\s*"
                      r"['\"]?(?P<valor>\d+(?:[.,]\d+)?)['\"]?\s*,\s*['\"]?(?P<cobranca>\d+)['\"]?\s*\)")
 
@@ -1234,7 +1294,12 @@ _PIX_RE = re.compile(r"openModalPix\(\s*['\"]?(?P<cand>\d+)['\"]?\s*,\s*['\"]?(?
 # botão de pagamento do Histórico (historico.js): openModalWindown(idOferta, numPedidoCartao, valor, parcelas,
 # codCandidato, codConcurso, podeBoletar, podeCartao, boletoOuCartao, idBoleto, permiteBoleto, permitePix, idCobranca)
 _MODAL_PAGAMENTO_RE = re.compile(r"openModalWindown\(([^)]*)\)")
-EFETIVAR_TIMEOUT = 120.0
+# A função na Vercel morre em 60 s (maxDuration do vercel.json): o efetivar precisa caber com folga para as leituras
+# antes e a conferência do histórico depois, senão o candidato vê erro sem o portal saber se gravou.
+EFETIVAR_TIMEOUT = 40.0
+PAGANDO_TTL = 10 * 60  # s sem aceitar outra confirmação depois de um efetivar sem resposta definitiva
+MSG_PAGAMENTO_PROCESSANDO = ("Seu pagamento está sendo processado pelo Processo Seletivo. Não confirme de novo: "
+                             "em alguns minutos a matrícula aparece em Minhas inscrições.")
 
 
 def _pdf_base64(item: object) -> bytes | None:

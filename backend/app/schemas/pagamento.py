@@ -52,17 +52,17 @@ class CupomResultado(ApiModel):
 
 
 class Responsavel(ApiModel):
-    nome: str = Field(min_length=3, description="Nome completo ou razão social")
-    documento: str = Field(description="CPF (OutraPessoa) ou CNPJ (Empresa)")
-    data_nascimento: str | None = None
+    nome: str = Field(min_length=3, max_length=150, description="Nome completo ou razão social")
+    documento: str = Field(max_length=20, description="CPF (OutraPessoa) ou CNPJ (Empresa)")
+    data_nascimento: str | None = Field(default=None, max_length=10)
     sexo: Literal["M", "F", "O"] | None = None
-    estado_civil: str | None = None
-    rg: str | None = None
-    email: str | None = None
-    celular: str | None = None
-    telefone: str | None = None
-    inscricao_estadual: str | None = None
-    inscricao_municipal: str | None = None
+    estado_civil: str | None = Field(default=None, max_length=40)
+    rg: str | None = Field(default=None, max_length=20)
+    email: str | None = Field(default=None, max_length=100)
+    celular: str | None = Field(default=None, max_length=20)
+    telefone: str | None = Field(default=None, max_length=20)
+    inscricao_estadual: str | None = Field(default=None, max_length=30)
+    inscricao_municipal: str | None = Field(default=None, max_length=30)
     endereco: Endereco
 
     @field_validator("email")
@@ -96,8 +96,8 @@ class Responsavel(ApiModel):
 class PagamentoIn(ApiModel):
     tipo_resp: TipoResp
     responsavel: Responsavel | None = None
-    codigo_plano: str
-    voucher: str | None = None
+    codigo_plano: str = Field(max_length=80)
+    voucher: str | None = Field(default=None, max_length=40)
 
     @model_validator(mode="after")
     def _check(self):

@@ -149,3 +149,59 @@ def test_limite_de_tentativas_por_documento(logged, com_ia):
     j = _upload(logged).json()
     assert leitor.chamadas == limite  # a última não chamou a IA
     assert j["analise"]["veredito"] == "erro" and "várias vezes" in j["analise"]["alertas"][0]
+
+
+def test_limite_de_tentativas_nao_zera_ao_entrar_de_novo(logged, com_ia):
+    from app.config import get_settings
+    from tests.conftest import H as cab
+    leitor = com_ia(LeitorFalso(leitura()))
+    limite = get_settings().ia_documentos_tentativas_por_documento
+    for _ in range(limite):
+        _upload(logged)
+    logged.post("/api/v1/auth/logout", headers=cab)
+    logged.post("/api/v1/auth/login", json={"login": "ana.rocha@exemplo.com", "senha": "demonstracao"}, headers=cab)
+    _upload(logged)
+    assert leitor.chamadas == limite  # sessão nova, mesma pessoa: a conta continua
+
+
+def test_documento_ja_entregue_nao_gasta_ia(logged, com_ia, monkeypatch):
+    leitor = com_ia(LeitorFalso(leitura()))
+    gw = app.state.gateway
+    original = gw.listar_documentos
+
+    async def entregue(cod_pessoa, insc):
+        docs = await original(cod_pessoa, insc)
+        for d in docs:
+            if d.codigo == "04":
+                d.status = "enviado"
+        return docs
+
+    monkeypatch.setattr(gw, "listar_documentos", entregue)
+    r = _upload(logged)
+    assert r.status_code == 409 and leitor.chamadas == 0
+
+
+def _pdf(paginas):
+    import io
+
+    from pypdf import PdfWriter
+    w = PdfWriter()
+    for _ in range(paginas):
+        w.add_blank_page(width=200, height=200)
+    b = io.BytesIO()
+    w.write(b)
+    return b.getvalue()
+
+
+def test_ia_recebe_so_as_primeiras_paginas_do_pdf():
+    import io
+
+    from pypdf import PdfReader
+
+    from app.services.ia_documentos import primeiras_paginas
+    assert len(PdfReader(io.BytesIO(primeiras_paginas(_pdf(100), 2))).pages) == 2
+    pequeno = _pdf(1)
+    assert primeiras_paginas(pequeno, 2) is pequeno  # já cabe: vai como veio
+    from pypdf.errors import PdfReadError
+    with pytest.raises(PdfReadError):
+        primeiras_paginas(b"%PDF-1.4 lixo", 2)

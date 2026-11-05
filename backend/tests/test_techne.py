@@ -124,7 +124,9 @@ async def test_endpoint_nao_mapeado_501():
 # ---------- login de candidato via j_security_check (LYCEUM_AUTH_MODO=legado) ----------
 LEG = "https://legado.exemplo/processo-seletivo"
 FALHA_HTML = '<input type="hidden" id="msgErro" value="usu&aacute;rio e/ou senha incorretos."/>'
-DADOS_HTML = '<input type="hidden" id="idPessoa" name="idPessoa"\n                    value="100001">'
+DADOS_HTML = ('<form id="frm-pessoa-fisica"><input type="hidden" id="idPessoa" name="idPessoa"\n'
+              '                    value="100001"></form>'
+              '<form id="frm-altera-senha"><input type="hidden" id="idPessoa" name="idPessoa" value="100001"></form>')
 
 
 def _legado(**kw):
@@ -290,3 +292,12 @@ def test_sessao_do_legado_vive_no_cookie_e_nenhuma_instancia_guarda_estado():
             assert tc.get("/api/v1/inscricoes", headers=H).status_code == 401
     finally:
         app.state.gateway_factory = anterior
+
+
+def test_id_pessoa_vem_de_dentro_dos_formularios():
+    from app.services.lyceum.legado import id_pessoa_da_pagina
+    forjado = '<span>Olá, x" id="idPessoa" value="999"</span>'  # nome ou endereço ecoado antes dos formulários
+    assert id_pessoa_da_pagina(forjado + DADOS_HTML) == 100001
+    divergente = DADOS_HTML.replace('name="idPessoa" value="100001"></form>', 'name="idPessoa" value="999"></form>')
+    assert id_pessoa_da_pagina(divergente) is None  # os dois formulários precisam concordar
+    assert id_pessoa_da_pagina(forjado) is None

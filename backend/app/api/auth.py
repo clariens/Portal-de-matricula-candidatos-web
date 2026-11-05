@@ -35,7 +35,7 @@ async def logout(request: Request, gw: LyceumGateway = Depends(gateway), s: Sett
         sessao_atual.set(user.sid)
         await gw.sair()
     r = Response(status_code=204)
-    clear_session(r)
+    clear_session(r, s)
     return r
 
 

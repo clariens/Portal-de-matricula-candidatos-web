@@ -4,6 +4,7 @@ import { api, ApiError } from "../../api/client";
 import type { Matricula, PagamentoResultado, Questionario } from "../../api/types";
 import { Alert, Spin } from "../../components/ui";
 import { AssinaturaContrato } from "../../components/AssinaturaContrato";
+import { urlExternaSegura } from "../../lib/navegacao";
 import { COBRANCA_KEY } from "./EtapaPagamento";
 import { PrimeiraParcela } from "./PrimeiraParcela";
 import { useWizard } from "./Wizard";
@@ -113,8 +114,8 @@ export function EtapaConclusao() {
           <ul>
             {questionarios.map((q) => (
               <li key={q.codigo}>
-                {q.url ? (
-                  <a href={q.url} target="_blank" rel="noreferrer">
+                {urlExternaSegura(q.url) ? (
+                  <a href={urlExternaSegura(q.url)!} target="_blank" rel="noreferrer">
                     {q.titulo}
                   </a>
                 ) : (

@@ -45,7 +45,7 @@ python -m venv .venv
 .venv/Scripts/activate            # Linux/macOS: source .venv/bin/activate
 pip install -e ".[dev]"
 cp .env.example .env              # preencha credenciais da API e PORTAL_SESSION_SECRET
-python -m uvicorn app.main:app --reload     # http://127.0.0.1:8000/api/docs
+python -m uvicorn app.main:app --reload     # http://127.0.0.1:8000/api/docs (com PORTAL_API_DOCS=true no .env)
 # (use "python -m uvicorn": nas máquinas Clariens o uvicorn.exe da .venv é bloqueado com "Acesso negado")
 
 # frontend (outro terminal)
