@@ -59,13 +59,15 @@ irreversível no Lyceum e precisa de aval antes do primeiro envio real. Visão g
 - [x] Primeiro `efetivar.json` real em DEV (04/11/2026; inscrição de teste 2027100000285 agora Pré-Matriculado)
 - [ ] Valores das parcelas e total (fonte a definir: `GET /v2/tabela/concursos` ou API de planos)
 - [ ] Cupom de 100% (plano `N:N:N:1`, "Bolsa integral")
-- [ ] Cobrança real depois de confirmar (boleto/PIX da 1ª parcela via `/r/terminoIngresso`)
+- [x] Cobrança real depois de confirmar (boleto/PIX da 1ª parcela; também pelo histórico)
 - [ ] Abrir o pagamento numa sessão nova sem pedir "Revisar meus dados"
 - [ ] Cartão de crédito com tokenização (PCI) — decisão de fornecedor
 
 ## Fase 5 — Conclusão e pós-matrícula
-- [x] Tela de sucesso (matrícula, 1ª parcela, contrato, disciplinas) — hoje só no dublê dos testes
+- [x] Tela de sucesso (matrícula, 1ª parcela, contrato); disciplinas só no dublê dos testes
 - [x] Conclusão depois do pagamento: matrícula, situação e instruções do contrato (`/r/contrato`), documentos em consulta
+- [x] Telas próprias de Contrato e Documentos de ingresso, abertas pelo histórico
+- [x] Contrato, documentos, Minhas inscrições e Meus dados em cache na aba (abrem na hora; saem do cache quando o portal grava)
 - [ ] "Próximo" do contrato (`aceitaContrato.json`) e `proximo.json` do término — **(autorização)**
 - [ ] Prévia de documentos enviados pelo formulário de lote (download do legado sem o arquivo) — **(Lyceum)**
 - [ ] Questionário pendente (`/r/questionario`)
@@ -81,12 +83,29 @@ irreversível no Lyceum e precisa de aval antes do primeiro envio real. Visão g
 - [ ] Menu do cabeçalho apontando para as telas novas (legado como reserva)
 
 ## Fase 7 — Endurecimento e entrega
-- [x] Testes: pytest (123), vitest (17) e e2e Playwright (fluxo completo, cabeçalho, recuperação de senha)
+- [x] Testes: pytest (156), vitest (24) e e2e Playwright (fluxo completo, cabeçalho, recuperação de senha, Meus dados, cache)
+- [x] Layout de celular (até 640 px) conferido no fluxo inteiro em 390 px, sem rolagem lateral
 - [x] Logs `[lyceum]` sem PII; `/api/v1/health`
 - [x] Vercel (Services) sem banco de dados; validado com duas instâncias atendendo o mesmo candidato
 - [ ] CI (lint + testes + e2e) no pipeline
 - [ ] Variáveis de produção (`LYCEUM_*` de produção, segredo novo, `PORTAL_COOKIE_SECURE=true`)
 - [ ] Aval de LGPD / IA CoE; teto de gasto da IA compartilhado entre instâncias
 - [ ] Rotação das credenciais usadas no desenvolvimento
+- [ ] Análise de segurança completa (iniciada em 05/11/2026)
 - [ ] Acessibilidade e teste em celulares reais
 - [ ] Piloto com uma unidade e plano de corte do portal antigo
+
+## Fase 8 — Chat de suporte (Etapa E do roadmap)
+- [ ] Decidir quem atende, horário e o que acontece fora dele (mensagem automática ou assistente com IA)
+- [ ] n8n alcançável pelo BFF com autenticação forte (segredo + HMAC), confirmado com a infraestrutura
+- [ ] Tabelas no SQL Server: atendentes, conversas e mensagens; retenção e aval do DPO
+- [ ] Usuários de atendimento (criação e login próprio, de preferência com a conta Microsoft)
+- [ ] API do BFF `/suporte/…` (candidato identificado pela sessão) e webhooks do n8n
+- [ ] Tela do candidato (botão de ajuda, conversa, aviso de mensagem nova)
+- [ ] Tela de atendimento (fila por unidade, contexto do candidato)
+- [ ] Limites de envio, texto sem HTML, logs sem o conteúdo das mensagens
+
+## Fase 9 — Tela inicial para todas as unidades (Etapa F do roadmap)
+- [ ] Texto e imagens da tela de login neutros (hoje só Medicina)
+- [ ] Todas as unidades na tela inicial (avaliar ler a lista do cabeçalho do legado)
+- [ ] Decidir o monitor cardíaco (fica ou vira animação neutra)

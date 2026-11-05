@@ -15,12 +15,15 @@ Fluxo do candidato: **Login → Minhas inscrições → Dados → Documentos (co
 |---|---|
 | Login, histórico, esqueci minha senha, cabeçalho | ✅ funcionando |
 | Dados e Documentos | ✅ leitura e gravação reais |
-| Pagamento | ⚠ planos e cupom reais; confirmação em simulação |
-| Conclusão | ❌ ainda não ligada ao Lyceum |
+| Pagamento | ✅ confirmação real validada em DEV; boleto e PIX depois de confirmar (cartão fora, PCI) |
+| Conclusão e pós-matrícula | ⚠ matrícula, contrato e documentos de ingresso; "Próximo" do contrato ainda não ligado |
+| Meus dados | ✅ contato, endereço e troca de senha |
+| Celular | ✅ layout próprio (falta testar em aparelhos reais) |
 | Áreas de interesse e Cadastre-se | ⚠ abrem as páginas do legado; telas próprias são a próxima fase |
 
-**Próximas etapas:** [docs/roadmap.md](docs/roadmap.md): (A) pagamento de ponta a ponta e conclusão; (B) telas
-próprias das áreas de interesse, busca, oferta e cadastro.
+**Próximas etapas:** [docs/roadmap.md](docs/roadmap.md): (A) conclusão e o que falta do pagamento; (B) telas
+próprias das áreas de interesse, busca, oferta e cadastro; (C) endurecimento e análise de segurança; (E) chat de
+suporte (n8n + SQL Server); (F) tela inicial para todas as unidades.
 
 | Pasta | Conteúdo |
 |---|---|
@@ -53,7 +56,7 @@ npm run dev                       # http://localhost:5173 (proxy /api → :8000)
 
 O portal **não tem modo de demonstração**: sempre fala com o Lyceum configurado no `backend/.env`
 (`LYCEUM_API_BASE_URL`, `LYCEUM_API_BASIC_USER`, `LYCEUM_API_BASIC_PASSWORD`, `LYCEUM_LEGADO_BASE_URL` e um
-`PORTAL_SESSION_SECRET` forte). Sem essas variáveis o servidor **não inicia** e diz o que falta. O `backend/.env` é
+`PORTAL_SESSION_SECRET` forte). Sem o segredo o servidor **não inicia**; sem as variáveis do Lyceum, as rotas respondem 503 dizendo o que falta. O `backend/.env` é
 lido de qualquer pasta. Entre com um candidato real do ambiente (CPF e senha do Processo Seletivo).
 
 Gravações irreversíveis ficam em simulação por padrão: `LYCEUM_DOCUMENTOS_MODO` e `LYCEUM_PAGAMENTO_MODO`
@@ -63,8 +66,8 @@ Gravações irreversíveis ficam em simulação por padrão: `LYCEUM_DOCUMENTOS_
 ## Testes
 
 ```bash
-cd backend && .venv/Scripts/python -m pytest      # 118 testes: API com dublê do Lyceum (tests/fake_lyceum.py), legado e Techne com respx
-cd frontend && npm test                           # máscaras, CPF/CNPJ, regras do OCR
+cd backend && .venv/Scripts/python -m pytest      # 156 testes: API com dublê do Lyceum (tests/fake_lyceum.py), legado e Techne com respx
+cd frontend && npm test                           # 24 testes: máscaras, CPF/CNPJ, regras do OCR, cache das telas
 cd frontend && npx playwright install chromium && npm run e2e   # fluxo completo no navegador com o dublê do Lyceum (só teste)
 ```
 

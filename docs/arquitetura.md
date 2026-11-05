@@ -44,17 +44,40 @@
 ## Frontend (`frontend/src`)
 | Pasta | Papel |
 |---|---|
-| `api/` | `client.ts` (fetch, `X-Requested-With`, `ApiError` com campos, inspetor em dev), `schema.d.ts` gerado, `types.ts` |
-| `components/` | `Shell` (cabeçalho com logo, Área de interesse e Cadastre-se; inspetor em dev), `auth` (contexto + `RequireAuth`), `ui`, `EnderecoFields` |
-| `pages/` | `Login` (entrar e recuperar senha), `Historico`, `wizard/` (`Wizard` + 4 etapas) |
-| `lib/` | `format.ts`, `anexosLocais.ts` (IndexedDB dos anexos), `imagem.ts`, `ocr/` (reserva quando a IA está desligada) |
-| `styles/app.css` | Tokens e componentes do protótipo |
+| `api/` | `client.ts` (fetch, `X-Requested-With`, `ApiError` com campos, aviso de gravação para o cache, inspetor em dev), `schema.d.ts` gerado, `types.ts` |
+| `components/` | `Shell` (cabeçalho com logo, Área de interesse e Cadastre-se; logado: Minhas inscrições, Meus dados e Sair, recolhidos no botão "Menu" no celular; inspetor em dev), `auth` (contexto + `RequireAuth`), `ui`, `EnderecoFields`, `Visor`, `AssinaturaContrato` |
+| `pages/` | `Login` (entrar e recuperar senha), `Historico`, `MeusDados`, `ContratoInscricao`, `DocumentosIngresso`, `wizard/` (`Wizard` + 4 etapas, `PrimeiraParcela`) |
+| `lib/` | `format.ts`, `anexosLocais.ts` (IndexedDB dos anexos), `cacheTelas.ts` (cache em memória da aba), `imagem.ts`, `ocr/` (reserva quando a IA está desligada) |
+| `styles/app.css` | Tokens e componentes do protótipo; bloco "celular" no fim (até 640 px) |
+
+### Cache das telas (`lib/cacheTelas.ts`)
+Minhas inscrições, Meus dados, Contrato e Documentos de ingresso ficam em memória na aba por 5 min, para abrir na
+hora ao voltar. Ao carregar o histórico, o portal adianta Meus dados, contrato, lista de documentos e prévias.
+Boleto e PIX nunca entram (cada geração registra uma cobrança). Cada gravação avisa o cache (`setWriteHandler` em
+`client.ts` → `invalidarApos`):
+
+| Gravação | Sai do cache |
+|---|---|
+| Qualquer `POST/PUT` em `/inscricoes/{ref}/…` | a lista de inscrições, Meus dados e tudo daquela inscrição |
+| `PUT /meus-dados` | Meus dados (a tela guarda o que o servidor devolveu) |
+| `POST /meus-dados/senha`, `/auth/*` | nada (entrar e sair limpam tudo) |
+
+O cache inteiro é apagado ao entrar, ao sair e quando a sessão expira (401).
+
+### Celular
+Corte em 640 px (`styles/app.css`). O topo de quem está logado recolhe a navegação no botão "Menu". As 4 etapas
+cabem lado a lado e o resumo da vaga começa recolhido (`<details>`). O rodapé da matrícula fica preso ao pé da
+tela. Os campos curtos ficam em pares (classes `m4`/`m6`/`m8`), com fonte de 16 px para o iPhone não dar zoom. O
+visor abre em tela cheia.
 
 ## Rotas do front
 | Rota | Tela |
 |---|---|
 | `/login` | Login |
 | `/inscricoes` | Histórico |
+| `/inscricoes/:ref/contrato` | Contrato (matrícula e como assinar pela Clicksign) |
+| `/inscricoes/:ref/documentos` | Documentos de ingresso (o que o Lyceum registrou, com prévia) |
+| `/meus-dados` | Contato, endereço e troca de senha |
 | `/matricula/:id` | Redireciona para a etapa liberada mais adiante |
 | `/matricula/:id/{dados,documentos,pagamento,conclusao}` | Wizard |
 

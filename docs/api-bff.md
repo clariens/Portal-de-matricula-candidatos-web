@@ -36,6 +36,9 @@ A documentação interativa fica em **`/api/docs`** (Swagger do FastAPI), e o co
 | POST | `/auth/logout` | → 204 (apaga os dois cookies) |
 | POST | `/auth/recuperar-senha` | `{login}` (e-mail, CPF, RG ou passaporte) → `{mensagem}` do Processo Seletivo |
 | GET | `/me` | → `Pessoa`, ou `null` sem sessão (200) |
+| GET | `/meus-dados` | → `MeusDados` (e-mail, celular, telefone, endereço), lidos do "Meus Dados" do legado |
+| PUT | `/meus-dados` | `MeusDadosUpdate` → `MeusDados` (`alterarPessoaFisica.json`; o `idPessoa` vem da página aberta na sessão) |
+| POST | `/meus-dados/senha` | `{senhaAtual, novaSenha, confirmacao}` → `{mensagem}` (`alterarSenhaPessoa.json`). 409 se o legado pedir reCAPTCHA. Senhas fora do log |
 | GET | `/publico/cabecalho` | → `Cabecalho` (áreas de interesse + `cadastroUrl`), sem login |
 | GET | `/recursos` | → `{conferenciaDocumentos: "ia" \| "navegador"}` |
 | GET | `/inscricoes` | → `Inscricao[]` (com `acoes` e `etapaAtual`) |
@@ -53,7 +56,7 @@ A documentação interativa fica em **`/api/docs`** (Swagger do FastAPI), e o co
 | GET | `/inscricoes/{ref}/pagamento/opcoes` | → `OpcoesPagamento` |
 | POST | `/inscricoes/{ref}/cupons/validar` | `{codigo}` → `CupomResultado` |
 | POST | `/inscricoes/{ref}/pagamento` | `PagamentoIn` → `PagamentoResultado` |
-| GET | `/inscricoes/{ref}/matricula` | → `Matricula` |
+| GET | `/inscricoes/{ref}/matricula` | → `Matricula` (número, turma, pagamento e instruções do contrato lidas de `/r/contrato`) |
 | POST | `/inscricoes/{ref}/matricula/confirmar` | → `ConfirmacaoResultado` |
 | GET | `/questionarios/pendentes` | → `Questionario[]` |
 | GET | `/health` | → `{status, lyceum}` (503 se degradado) |
